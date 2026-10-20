@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{% endblock %} · Jobs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css">
+<style>
+  /* Pico handles base typography, forms, buttons, tables and dark mode. Below: tweaks and app-specific bits. */
+  :root { --pico-font-size:95%; --pico-form-element-spacing-vertical:.5rem; --pico-form-element-spacing-horizontal:.7rem; }
+  main.container { padding-top:0; padding-bottom:3rem; }
+  main.narrow { max-width:46rem; }
+  nav.top { border-bottom:1px solid var(--pico-muted-border-color); margin-bottom:1.5rem; }
+  nav.top a { color:var(--pico-muted-color); text-decoration:none; font-weight:500; }
+  nav.top a.on { color:var(--pico-color); }
+  h1 { font-size:1.5rem; }
+  h2 { font-size:1.1rem; margin-top:2rem; }
+  .muted, .hint { color:var(--pico-muted-color); font-size:.85rem; font-weight:400; }
+  .warn { color:var(--pico-del-color); }
+  fieldset { border:1px solid var(--pico-muted-border-color); border-radius:var(--pico-border-radius); padding:1rem 1.25rem; margin-bottom:1.25rem; }
+  legend { font-weight:600; padding:0 .4rem; }
+  label.inline { display:flex; gap:.5rem; align-items:center; }
+  textarea { min-height:5rem; resize:vertical; }
+  textarea.resume { min-height:16rem; font-family:var(--pico-font-family-monospace); font-size:.85rem; }
+  textarea.letter { min-height:24rem; font-family:Georgia, serif; line-height:1.6; }
+  .row { display:grid; grid-template-columns:repeat(auto-fit, minmax(12rem, 1fr)); gap:0 1rem; }
+  button.ghost { --pico-background-color:transparent; --pico-color:var(--pico-muted-color); --pico-border-color:var(--pico-muted-border-color); padding:.2rem .6rem; font-size:.85rem; font-weight:500; margin:0; width:auto; }
+  .score { display:inline-block; min-width:2.2em; text-align:center; border-radius:6px; padding:.1rem .3rem; font-weight:700; }
+  .score.high { background:#1f8a4c; color:#fff; } .score.mid { background:#c98a12; color:#fff; } .score.low { background:var(--pico-muted-border-color); color:var(--pico-muted-color); }
+  .reason { color:var(--pico-muted-color); font-size:.85rem; margin-top:.25rem; max-width:48rem; }
+  .flag { display:inline-block; border:1px solid #c0563f; color:#c0563f; border-radius:4px; padding:0 .3rem; font-size:.75rem; margin:.1rem .1rem 0 0; }
+  td.actions { white-space:nowrap; }
+  th.role { width:45%; }
+  .page-head { display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:var(--pico-typography-spacing-vertical); }
+  .page-head h1, .page-head button { margin:0; }
+  #dismiss-dialog footer { text-align:right; }
+  #dismiss-dialog footer button { margin:0 0 0 .5rem; }
+  #edit-dialog article, #add-dialog article { width:100%; max-width:52rem; }
+  #edit-dialog textarea.letter, #add-dialog textarea.letter { min-height:14rem; }
+  #edit-dialog .form-actions, #add-dialog .form-actions { position:sticky; bottom:calc(-1 * var(--pico-block-spacing-vertical)); margin:0 calc(-1 * var(--pico-block-spacing-horizontal)) calc(-1 * var(--pico-block-spacing-vertical)); padding:.75rem var(--pico-block-spacing-horizontal); background:var(--pico-card-sectioning-background-color); border-top:1px solid var(--pico-muted-border-color); text-align:right; }
+  #edit-dialog .form-actions button, #add-dialog .form-actions button { margin:0; }
+  .flags { margin-top:.3rem; }
+  .flash { border-left:4px solid var(--pico-primary); background:var(--pico-card-background-color); padding:.6rem 1rem; margin-bottom:1.25rem; }
+  .table-wrap { overflow-x:auto; }
+  table { font-size:.9rem; }
+  th { font-size:.8rem; text-transform:uppercase; letter-spacing:.03em; color:var(--pico-muted-color); }
+  td form { margin:0; }
+  tr.off td { opacity:.5; }
+  .chips { display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:1rem; }
+  .chips a { padding:.25rem .7rem; border:1px solid var(--pico-muted-border-color); border-radius:1rem; text-decoration:none; color:var(--pico-muted-color); font-size:.85rem; }
+  .chips a.on { border-color:var(--pico-primary); color:var(--pico-color); }
+  .status { display:inline-block; padding:.05rem .5rem; border-radius:1rem; --c:var(--pico-muted-color); color:var(--c); border:1px solid color-mix(in srgb, var(--c) 45%, transparent); background:color-mix(in srgb, var(--c) 12%, transparent); font-size:.8rem; white-space:nowrap; }
+  .status-preparing { --c:#6b7a99; } .status-applied { --c:#2f7fd1; } .status-screening { --c:#8b5cc4; } .status-interviewing { --c:#c98a12; }
+  .status-offer { --c:#1f8a4c; } .status-rejected { --c:#c0563f; } .status-withdrawn, .status-no-response { --c:var(--pico-muted-color); }
+  form.inline { display:inline; margin:0; }
+  button[type=submit] { width:auto; }
+  .row button { width:100%; }
+</style>
+</head>
+<body>
+<nav class="container top">
+  <ul>
+    <li><a href="/jobs" {% if page == 'jobs' %}class="on"{% endif %}>Jobs</a></li>
+    <li><a href="/applications" {% if page == 'applications' %}class="on"{% endif %}>Applications</a></li>
+    <li><a href="/sources" {% if page == 'sources' %}class="on"{% endif %}>Sources</a></li>
+    <li><a href="/profile" {% if page == 'profile' %}class="on"{% endif %}>Profile</a></li>
+  </ul>
+</nav>
+{% block body %}{% endblock %}
+</body>
+</html>

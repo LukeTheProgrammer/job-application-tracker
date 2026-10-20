@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Sources{% endblock %}
+{% block body %}
+<main class="container">
+  <h1>Sources</h1>
+  {% if message %}<div class="flash">{{ message }}</div>{% endif %}
+
+  <form method="post" action="/sources/fetch" style="margin-bottom:1.5rem">
+    <button type="submit">Fetch now</button>
+    <span class="muted">&nbsp;Runs in the background; also runs automatically every 3 hours.{% if last_fetch %} Last fetch {{ last_fetch | age }} ago.{% endif %}</span>
+  </form>
+
+  <h2>Job sources</h2>
+  <div class="table-wrap">
+    <table>
+      <tr><th style="width:3rem">On</th><th>Source</th><th>Companies</th></tr>
+      {% for source in sources %}
+      <tr class="{% if not source.enabled %}off{% endif %}">
+        <td>
+          <form method="post" action="/sources/{{ source.key }}/toggle">
+            <input type="checkbox" role="switch" aria-label="Enable {{ names[source.key] }}" {% if source.enabled %}checked{% endif %} onchange="this.form.submit()">
+          </form>
+        </td>
+        <td>{{ names[source.key] }}</td>
+        <td class="muted">{{ company_counts.get(source.key, 0) }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <h2>Companies</h2>
+  <form method="post" action="/companies" class="row" style="align-items:end; margin-bottom:1rem">
+    <div><label for="name">Name</label><input type="text" id="name" name="name" required></div>
+    <div><label for="ats">ATS</label>
+      <select id="ats" name="ats">{% for source in sources %}<option value="{{ source.key }}">{{ names[source.key] }}</option>{% endfor %}</select></div>
+    <div><label for="slug">Board slug <span class="hint">from the careers-page link</span></label><input type="text" id="slug" name="slug" required></div>
+    <div><button type="submit">Add company</button></div>
+  </form>
+  <div class="table-wrap">
+    <table>
+      <tr><th style="width:3rem">On</th><th>Company</th><th>ATS / slug</th><th>Last fetch</th><th></th></tr>
+      {% for company in companies %}
+      <tr class="{% if not company.enabled or not enabled_sources[company.ats] %}off{% endif %}">
+        <td>
+          <form method="post" action="/companies/{{ company.id }}/toggle">
+            <input type="checkbox" role="switch" aria-label="Enable {{ company.name }}" {% if company.enabled %}checked{% endif %} onchange="this.form.submit()">
+          </form>
+        </td>
+        <td>{{ company.name }}</td>
+        <td class="muted">{{ names[company.ats] }} / {{ company.slug }}</td>
+        <td>
+          {% if company.last_error %}<span class="warn" title="{{ company.last_error }}">Error</span>
+          {% elif company.last_fetched_at %}<span class="muted">{{ company.last_job_count }} jobs · {{ company.last_fetched_at | age }} ago</span>
+          {% else %}<span class="muted">Never</span>{% endif %}
+        </td>
+        <td>
+          <form method="post" action="/companies/{{ company.id }}/delete">
+            <button class="ghost" type="submit" aria-label="Remove {{ company.name }}">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</main>
+{% endblock %}

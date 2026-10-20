@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Applications{% endblock %}
+{% block body %}
+<main class="container">
+  <div class="page-head">
+    <h1>Applications</h1>
+    <button type="button" onclick="document.getElementById('add-dialog').showModal(); document.getElementById('add-company_name').focus()">Add a job</button>
+  </div>
+  <div class="chips">
+    <a href="/applications" {% if not current %}class="on"{% endif %}>All ({{ total }})</a>
+    {% for s in statuses %}{% if counts.get(s) %}
+    <a href="/applications?status={{ s | urlencode }}" {% if current == s %}class="on"{% endif %}>{{ s }} ({{ counts[s] }})</a>
+    {% endif %}{% endfor %}
+  </div>
+  {% if not applications %}
+    <p class="muted">Nothing tracked yet. Click <b>Track</b> on a job on the <a href="/jobs">Jobs</a> page, or use <b>Add a job</b> for one found elsewhere.</p>
+  {% else %}
+  <div class="table-wrap">
+    <table>
+      <tr><th>Status</th><th>Role</th><th>Company</th><th>Applied</th><th>Cover letter</th><th>Updated</th><th></th></tr>
+      {% for a in applications %}
+      <tr>
+        <td><span class="status status-{{ a.status | lower | replace(' ', '-') }}">{{ a.status }}</span></td>
+        <td><a href="/applications/{{ a.id }}">{{ a.title }}</a></td>
+        <td>{{ a.company_name }}</td>
+        <td class="muted">{{ a.applied_on or '—' }}</td>
+        <td class="muted">{% if a.cover_letter %}{{ a.cover_letter.split() | length }} words{% else %}—{% endif %}</td>
+        <td class="muted">{{ a.updated_at | age }} ago</td>
+        <td><button class="ghost" type="button" onclick="openEdit({{ a.id }}, this.dataset.title)" data-title="{{ a.title }} at {{ a.company_name }}">Edit</button></td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+</main>
+
+<dialog id="add-dialog">
+  <article>
+    <header><button type="button" aria-label="Close" rel="prev" onclick="this.closest('dialog').close()"></button><h3>Add a job</h3></header>
+    {% with a=blank %}{% include "_application_form.html" %}{% endwith %}
+  </article>
+</dialog>
+
+<dialog id="edit-dialog">
+  <article>
+    <header><button type="button" aria-label="Close" rel="prev" onclick="this.closest('dialog').close()"></button><h3 id="edit-heading">Edit application</h3></header>
+    <div id="edit-body"></div>
+  </article>
+</dialog>
+<script>
+  async function openEdit(id, title) {
+    const dialog = document.getElementById("edit-dialog");
+    const next = location.pathname + location.search;
+    const res = await fetch(`/applications/${id}?partial=1&next=${encodeURIComponent(next)}`);
+    if (!res.ok) { location.href = `/applications/${id}`; return; }
+    document.getElementById("edit-body").innerHTML = await res.text();
+    document.getElementById("edit-heading").textContent = title;
+    dialog.showModal();
+  }
+  for (const dialog of document.querySelectorAll("dialog")) {
+    dialog.addEventListener("click", e => { if (e.target === dialog) dialog.close(); });
+  }
+</script>
+{% endblock %}

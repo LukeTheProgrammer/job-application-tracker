@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Jobs{% endblock %}
+{% block body %}
+<main class="container">
+  <h1>Jobs</h1>
+  <div class="chips">
+    <a href="/jobs" {% if view == 'matches' %}class="on"{% endif %}>Matches ({{ counts.matches }})</a>
+    <a href="/jobs?filtered=1" {% if view == 'filtered' %}class="on"{% endif %}>Filtered out ({{ counts.filtered }})</a>
+    <a href="/jobs?dismissed=1" {% if view == 'dismissed' %}class="on"{% endif %}>Dismissed ({{ counts.dismissed }})</a>
+  </div>
+  {% if not jobs %}
+    <p class="muted">{% if view == 'filtered' %}Nothing filtered out.{% elif view == 'dismissed' %}Nothing dismissed.{% else %}No matching jobs yet. Run a fetch from <a href="/sources">Sources</a>, or loosen the filters on your <a href="/profile">Profile</a>.{% endif %}</p>
+  {% else %}
+  <div class="table-wrap">
+    <table>
+      <tr><th>Fit</th><th>Posted</th><th class="role">Role</th><th>Company</th><th>Location</th><th>Salary</th>{% if view == 'filtered' %}<th>Why filtered</th>{% elif view == 'dismissed' %}<th>Why dismissed</th>{% endif %}<th></th></tr>
+      {% for job in jobs %}
+      <tr>
+        <td>{% if job.score is not none %}<span class="score {% if job.score >= 60 %}high{% elif job.score >= 35 %}mid{% else %}low{% endif %}">{{ job.score }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td class="muted">{{ job.posted_at | age }}</td>
+        <td><a href="{{ job.url }}" target="_blank" rel="noopener">{{ job.title }}</a>
+          {% if job.score_reason %}<div class="reason">{{ job.score_reason }}</div>{% if job.red_flags %}<div class="flags">{% for f in job.red_flags %}<span class="flag">{{ f }}</span> {% endfor %}</div>{% endif %}{% endif %}</td>
+        <td>{{ job.company_name }}</td>
+        <td title="{{ job.location or '' }}">{{ job | workplace }}</td>
+        <td class="muted">{% if job.salary_max %}{{ '{:,.0f}'.format(job.salary_min or 0) }}–{{ '{:,.0f}'.format(job.salary_max) }} {{ job.salary_currency or '' }}{% else %}—{% endif %}</td>
+        {% if view == 'filtered' %}<td class="muted">{{ job.filter_reason }}</td>{% elif view == 'dismissed' %}<td class="muted">{{ job.dismiss_reason or '—' }}</td>{% endif %}
+        <td class="actions">
+          {% if job.id in tracked %}<a href="/applications/{{ tracked[job.id] }}">Tracked</a>{% else %}<form class="inline" method="post" action="/jobs/{{ job.id }}/track"><button class="ghost">Track</button></form>{% endif %}
+          {% if view == 'dismissed' %}
+            <form class="inline" method="post" action="/jobs/{{ job.id }}/restore"><button class="ghost">Restore</button></form>
+          {% elif job.id not in tracked %}
+            <button class="ghost" type="button" onclick="openDismiss({{ job.id }}, this.dataset.title)" data-title="{{ job.title }} at {{ job.company_name }}">Dismiss</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% if view == 'filtered' and counts.filtered > jobs|length %}<p class="muted">Showing the {{ jobs|length }} newest.</p>{% endif %}
+  {% endif %}
+</main>
+
+<dialog id="dismiss-dialog">
+  <article>
+    <form method="post">
+      <h3>Dismiss job</h3>
+      <p class="muted" id="dismiss-title"></p>
+      <label for="dismiss-reason">Why? <span class="hint">Optional. Helps scoring.</span></label>
+      <textarea id="dismiss-reason" name="reason"></textarea>
+      <footer>
+        <button type="submit" class="secondary" formmethod="dialog" formnovalidate>Cancel</button>
+        <button type="submit">Dismiss</button>
+      </footer>
+    </form>
+  </article>
+</dialog>
+<script>
+  function openDismiss(id, title) {
+    const dialog = document.getElementById("dismiss-dialog");
+    dialog.querySelector("form").action = `/jobs/${id}/dismiss`;
+    dialog.querySelector("#dismiss-title").textContent = title;
+    dialog.querySelector("textarea").value = "";
+    dialog.showModal();
+    dialog.querySelector("textarea").focus();
+  }
+  document.getElementById("dismiss-dialog").addEventListener("click", e => { if (e.target.tagName === "DIALOG") e.target.close(); });
+</script>
+{% endblock %}

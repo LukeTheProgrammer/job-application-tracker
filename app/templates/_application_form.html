@@ -1,0 +1,35 @@
+  {# A new (unsaved) application posts to /applications; ids get a prefix so this can share a page with the edit form. #}
+  {% set p = 'add-' if a.id is none else '' %}
+  <form method="post" action="/applications{% if a.id is not none %}/{{ a.id }}{% endif %}">
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+    <fieldset>
+      <legend>Application</legend>
+      <div class="row">
+        <div>
+          <label for="{{ p }}status">Status</label>
+          <select id="{{ p }}status" name="status">
+            {% for s in statuses %}<option {% if s == a.status %}selected{% endif %}>{{ s }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="{{ p }}applied_on">Applied on</label>
+          <input type="date" id="{{ p }}applied_on" name="applied_on" value="{{ a.applied_on or '' }}">
+        </div>
+      </div>
+      <div class="row">
+        <div><label for="{{ p }}company_name">Company</label><input type="text" id="{{ p }}company_name" name="company_name" value="{{ a.company_name }}" required></div>
+        <div><label for="{{ p }}title">Role</label><input type="text" id="{{ p }}title" name="title" value="{{ a.title }}" required></div>
+      </div>
+      <label for="{{ p }}url">Posting URL {% if a.url %}<a class="hint" href="{{ a.url }}" target="_blank" rel="noopener">open ↗</a>{% endif %}</label>
+      <input type="url" id="{{ p }}url" name="url" value="{{ a.url }}">
+    </fieldset>
+    <fieldset>
+      <legend>Cover letter</legend>
+      <textarea class="letter" id="{{ p }}cover_letter" name="cover_letter">{{ a.cover_letter }}</textarea>
+    </fieldset>
+    <fieldset>
+      <legend>Notes</legend>
+      <textarea id="{{ p }}notes" name="notes" placeholder="Recruiter name, interview dates, follow-ups…">{{ a.notes }}</textarea>
+    </fieldset>
+    <p class="form-actions"><button>Save</button></p>
+  </form>

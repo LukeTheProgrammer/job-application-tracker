@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ a.title }}{% endblock %}
+{% block body %}
+<main class="container narrow">
+  <p class="muted"><a href="/applications">← Applications</a></p>
+  <h1>{{ a.title }} <span class="muted">at {{ a.company_name }}</span></h1>
+  {% if saved %}<div class="flash">Saved.</div>{% endif %}
+  {% if a.job and not a.job.active %}<div class="flash">This posting is no longer listed on the company's board.</div>{% endif %}
+  {% include "_application_form.html" %}
+  {% if a.job and a.job.description %}
+  <details><summary class="muted">Job description</summary><div style="white-space:pre-wrap">{{ a.job.description }}</div></details>
+  {% endif %}
+  <form method="post" action="/applications/{{ a.id }}/delete" style="margin-top:2rem">
+    <button class="ghost" name="confirm" value="1" onclick="return this.dataset.armed ? true : (this.dataset.armed = 1, this.textContent = 'Click again to delete', false)">Delete this application</button>
+  </form>
+</main>
+{% endblock %}

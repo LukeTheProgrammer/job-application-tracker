@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Profile{% endblock %}
+{% block body %}
+<main class="container narrow">
+  <h1>Search profile</h1>
+  {% if saved %}<div class="flash">Saved. Filters re-applied to current jobs.</div>{% endif %}
+  <form method="post" action="/profile" enctype="multipart/form-data">
+    <fieldset>
+      <legend>Resume</legend>
+      <label for="resume_file">Upload <span class="hint">PDF, .txt or .md. Replaces the text below.</span></label>
+      <input type="file" id="resume_file" name="resume_file" accept=".pdf,.txt,.md">
+      <label for="resume_text">Resume text <span class="hint">Sent to Claude for scoring.</span></label>
+      <textarea class="resume" id="resume_text" name="resume_text">{{ profile.resume_text }}</textarea>
+    </fieldset>
+
+    <fieldset>
+      <legend>Target roles</legend>
+      <label for="target_roles">Roles <span class="hint">One per line, e.g. "Senior Backend Engineer".</span></label>
+      <textarea id="target_roles" name="target_roles">{{ profile.target_roles | join('\n') }}</textarea>
+      <label for="title_keywords">Title must contain one of <span class="hint">Hard filter. Leave empty to allow any title.</span></label>
+      <textarea id="title_keywords" name="title_keywords">{{ profile.title_keywords | join('\n') }}</textarea>
+      <label for="title_terms">Title must also contain one of <span class="hint">Keeps out non-engineering roles like "Senior Account Executive".</span></label>
+      <textarea id="title_terms" name="title_terms">{{ profile.title_terms | join('\n') }}</textarea>
+      <label for="excluded_stacks">Exclude titles mentioning <span class="hint">e.g. ".NET". Descriptions are left to the scorer.</span></label>
+      <textarea id="excluded_stacks" name="excluded_stacks">{{ profile.excluded_stacks | join('\n') }}</textarea>
+    </fieldset>
+
+    <fieldset>
+      <legend>Location and pay</legend>
+      <label for="locations">Acceptable locations <span class="hint">One per line.</span></label>
+      <textarea id="locations" name="locations">{{ profile.locations | join('\n') }}</textarea>
+      <p class="hint" style="margin:.3rem 0 0">Matched on the city name, so "Leawood, KS" matches "Leawood, Kansas".</p>
+      <label class="inline" style="margin-top:.9rem"><input type="checkbox" name="remote_ok" value="true" {% if profile.remote_ok %}checked{% endif %}> Include remote roles</label>
+      <label for="remote_regions">Remote roles must be open to <span class="hint">Remote postings naming only other countries are dropped. "Remote" with no region always passes.</span></label>
+      <textarea id="remote_regions" name="remote_regions">{{ profile.remote_regions | join('\n') }}</textarea>
+      <div class="row">
+        <div>
+          <label for="salary_floor">Salary floor (USD/yr)</label>
+          <input type="text" inputmode="numeric" id="salary_floor" name="salary_floor" value="{{ profile.salary_floor or '' }}">
+        </div>
+        <div>
+          <label for="max_age_days">Ignore postings older than (days)</label>
+          <input type="number" min="1" max="365" id="max_age_days" name="max_age_days" value="{{ profile.max_age_days }}">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Notes for the scorer</legend>
+      <label for="notes">Anything else Claude should weigh <span class="hint">e.g. "Prefer small companies; no on-call-heavy roles."</span></label>
+      <textarea id="notes" name="notes">{{ profile.notes }}</textarea>
+    </fieldset>
+
+    <button type="submit">Save</button>
+  </form>
+</main>
+{% endblock %}

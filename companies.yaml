@@ -1,0 +1,76 @@
+# Initial company list, loaded into the database only when the companies table is empty.
+# After that, add, remove and toggle companies on the Sources page.
+# ats: greenhouse | lever | ashby | workable | smartrecruiters
+# slug: the board id in the company's careers-page links (e.g. boards.greenhouse.io/<slug>).
+
+# PHP / Laravel / WordPress / Drupal
+- {name: Laravel, ats: workable, slug: laravel}
+- {name: Acquia, ats: greenhouse, slug: acquia}
+- {name: Pantheon, ats: greenhouse, slug: pantheon}
+- {name: Kinsta, ats: lever, slug: kinsta}
+- {name: Wikimedia Foundation, ats: greenhouse, slug: wikimedia}
+- {name: ActiveCampaign, ats: lever, slug: activecampaign}
+- {name: Brevo, ats: lever, slug: brevo}
+- {name: Omnisend, ats: lever, slug: omnisend}
+
+# Kansas City area
+- {name: PayIt, ats: greenhouse, slug: payit}
+
+# Remote-first / remote-friendly product companies
+- {name: GitLab, ats: greenhouse, slug: gitlab}
+- {name: Zapier, ats: ashby, slug: zapier}
+- {name: Buffer, ats: ashby, slug: buffer}
+- {name: Help Scout, ats: ashby, slug: helpscout}
+- {name: Close, ats: ashby, slug: close}
+- {name: Circle, ats: ashby, slug: circle}
+- {name: Kit, ats: ashby, slug: kit}
+- {name: Hubstaff, ats: ashby, slug: hubstaff}
+- {name: Toptal, ats: lever, slug: toptal}
+- {name: Oyster, ats: ashby, slug: oyster}
+- {name: Jobber, ats: ashby, slug: jobber}
+- {name: Thinkific, ats: ashby, slug: thinkific}
+- {name: Mattermost, ats: greenhouse, slug: mattermost}
+- {name: Bitwarden, ats: greenhouse, slug: bitwarden}
+- {name: 1Password, ats: ashby, slug: 1password}
+- {name: Canonical, ats: greenhouse, slug: canonical}
+- {name: Storyblok, ats: greenhouse, slug: storyblok}
+- {name: Contentful, ats: greenhouse, slug: contentful}
+- {name: Sanity, ats: ashby, slug: sanity}
+- {name: Webflow, ats: ashby, slug: webflow}
+- {name: Typeform, ats: greenhouse, slug: typeform}
+- {name: SurveyMonkey, ats: ashby, slug: surveymonkey}
+- {name: Smartsheet, ats: greenhouse, slug: smartsheet}
+- {name: ClickUp, ats: ashby, slug: clickup}
+- {name: Miro, ats: ashby, slug: miro}
+- {name: Calendly, ats: greenhouse, slug: calendly}
+- {name: Squarespace, ats: greenhouse, slug: squarespace}
+- {name: Klaviyo, ats: greenhouse, slug: klaviyo}
+- {name: Attentive, ats: greenhouse, slug: attentive}
+- {name: Intercom, ats: greenhouse, slug: intercom}
+- {name: Gusto, ats: greenhouse, slug: gusto}
+- {name: Duolingo, ats: greenhouse, slug: duolingo}
+- {name: Khan Academy, ats: greenhouse, slug: khanacademy}
+- {name: Mozilla, ats: greenhouse, slug: mozilla}
+- {name: Dropbox, ats: greenhouse, slug: dropbox}
+- {name: Airtable, ats: greenhouse, slug: airtable}
+- {name: Twilio, ats: greenhouse, slug: twilio}
+- {name: Ripple, ats: greenhouse, slug: ripple}
+- {name: Canva, ats: smartrecruiters, slug: canva}
+- {name: ServiceTitan, ats: smartrecruiters, slug: servicetitan}
+- {name: BigCommerce, ats: smartrecruiters, slug: bigcommerce}
+
+# Developer tools / infrastructure
+- {name: Vercel, ats: greenhouse, slug: vercel}
+- {name: Netlify, ats: greenhouse, slug: netlify}
+- {name: Supabase, ats: ashby, slug: supabase}
+- {name: PostHog, ats: ashby, slug: posthog}
+- {name: Sentry, ats: ashby, slug: sentry}
+- {name: Linear, ats: ashby, slug: linear}
+- {name: Render, ats: ashby, slug: render}
+- {name: Railway, ats: ashby, slug: railway}
+- {name: Neon, ats: ashby, slug: neon}
+- {name: PlanetScale, ats: greenhouse, slug: planetscale}
+- {name: Fastly, ats: greenhouse, slug: fastly}
+- {name: Cloudflare, ats: greenhouse, slug: cloudflare}
+- {name: Datadog, ats: greenhouse, slug: datadog}
+- {name: Elastic, ats: greenhouse, slug: elastic}
