@@ -2,6 +2,8 @@
   {% set p = 'add-' if a.id is none else '' %}
   <form method="post" action="/applications{% if a.id is not none %}/{{ a.id }}{% endif %}">
     {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+    {% if a.id is none %}<input type="hidden" id="{{ p }}job_id" name="job_id" value="">{% endif %}
+    <p class="muted"><span class="copy-id" id="{{ p }}job-ref" data-copy="{{ a.job_id or '' }}" title="Copy job ID">{% if a.job_id %}Job ID {{ a.job_id }}{% endif %}</span></p>
     <fieldset>
       <legend>Application</legend>
       <div class="row">

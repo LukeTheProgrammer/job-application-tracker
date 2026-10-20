@@ -7,9 +7,9 @@
     <button type="button" onclick="document.getElementById('add-dialog').showModal(); document.getElementById('add-company_name').focus()">Add a job</button>
   </div>
   <div class="chips">
-    <a href="/applications" {% if not current %}class="on"{% endif %}>All ({{ total }})</a>
+    <a href="/applications?sort={{ sort }}&dir={{ dir }}" {% if not current %}class="on"{% endif %}>All ({{ total }})</a>
     {% for s in statuses %}{% if counts.get(s) %}
-    <a href="/applications?status={{ s | urlencode }}" {% if current == s %}class="on"{% endif %}>{{ s }} ({{ counts[s] }})</a>
+    <a href="/applications?status={{ s | urlencode }}&sort={{ sort }}&dir={{ dir }}" {% if current == s %}class="on"{% endif %}>{{ s }} ({{ counts[s] }})</a>
     {% endif %}{% endfor %}
   </div>
   {% if not applications %}
@@ -17,11 +17,15 @@
   {% else %}
   <div class="table-wrap">
     <table>
-      <tr><th>Status</th><th>Role</th><th>Company</th><th>Applied</th><th>Cover letter</th><th>Updated</th><th></th></tr>
+      {% macro sort_th(key, label) -%}
+      {%- set next_dir = 'asc' if sort == key and dir == 'desc' else 'desc' -%}
+      <th><a class="sort" href="/applications?{% if current %}status={{ current | urlencode }}&{% endif %}sort={{ key }}&dir={{ next_dir }}">{{ label }}{% if sort == key %} {{ '▼' if dir == 'desc' else '▲' }}{% endif %}</a></th>
+      {%- endmacro %}
+      <tr>{{ sort_th('status', 'Status') }}{{ sort_th('title', 'Role') }}{{ sort_th('company', 'Company') }}{{ sort_th('applied_on', 'Applied') }}<th>Cover letter</th>{{ sort_th('updated', 'Updated') }}<th></th></tr>
       {% for a in applications %}
       <tr>
         <td><span class="status status-{{ a.status | lower | replace(' ', '-') }}">{{ a.status }}</span></td>
-        <td><a href="/applications/{{ a.id }}">{{ a.title }}</a></td>
+        <td>{% if a.url %}<a href="{{ a.url }}" target="_blank" rel="noopener">{{ a.title }}</a>{% else %}{{ a.title }}{% endif %}</td>
         <td>{{ a.company_name }}</td>
         <td class="muted">{{ a.applied_on or '—' }}</td>
         <td class="muted">{% if a.cover_letter %}{{ a.cover_letter.split() | length }} words{% else %}—{% endif %}</td>

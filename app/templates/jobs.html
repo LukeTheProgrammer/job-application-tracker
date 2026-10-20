@@ -26,7 +26,7 @@
         <td class="muted">{% if job.salary_max %}{{ '{:,.0f}'.format(job.salary_min or 0) }}–{{ '{:,.0f}'.format(job.salary_max) }} {{ job.salary_currency or '' }}{% else %}—{% endif %}</td>
         {% if view == 'filtered' %}<td class="muted">{{ job.filter_reason }}</td>{% elif view == 'dismissed' %}<td class="muted">{{ job.dismiss_reason or '—' }}</td>{% endif %}
         <td class="actions">
-          {% if job.id in tracked %}<a href="/applications/{{ tracked[job.id] }}">Tracked</a>{% else %}<form class="inline" method="post" action="/jobs/{{ job.id }}/track"><button class="ghost">Track</button></form>{% endif %}
+          {% if job.id in tracked %}<button class="ghost" type="button" onclick="openEdit({{ tracked[job.id] }}, this.dataset.title)" data-title="{{ job.title }} at {{ job.company_name }}">Tracked</button>{% else %}<button class="ghost" type="button" onclick="openApply(this.dataset)" data-id="{{ job.id }}" data-company="{{ job.company_name }}" data-title="{{ job.title }}" data-url="{{ job.url }}">Apply</button>{% endif %}
           {% if view == 'dismissed' %}
             <form class="inline" method="post" action="/jobs/{{ job.id }}/restore"><button class="ghost">Restore</button></form>
           {% elif job.id not in tracked %}
@@ -45,7 +45,7 @@
   <article>
     <form method="post">
       <h3>Dismiss job</h3>
-      <p class="muted" id="dismiss-title"></p>
+      <p class="muted"><span id="dismiss-title"></span> <span class="copy-id" id="dismiss-job-ref" title="Copy job ID"></span></p>
       <label for="dismiss-reason">Why? <span class="hint">Optional. Helps scoring.</span></label>
       <textarea id="dismiss-reason" name="reason"></textarea>
       <footer>
@@ -55,11 +55,50 @@
     </form>
   </article>
 </dialog>
+<dialog id="add-dialog">
+  <article>
+    <header><button type="button" aria-label="Close" rel="prev" onclick="this.closest('dialog').close()"></button><h3 id="apply-heading">Apply</h3></header>
+    {% with a=blank %}{% include "_application_form.html" %}{% endwith %}
+  </article>
+</dialog>
+<dialog id="edit-dialog">
+  <article>
+    <header><button type="button" aria-label="Close" rel="prev" onclick="this.closest('dialog').close()"></button><h3 id="edit-heading">Edit application</h3></header>
+    <div id="edit-body"></div>
+  </article>
+</dialog>
 <script>
+  async function openEdit(id, title) {
+    const dialog = document.getElementById("edit-dialog");
+    const next = location.pathname + location.search;
+    const res = await fetch(`/applications/${id}?partial=1&next=${encodeURIComponent(next)}`);
+    if (!res.ok) { location.href = `/applications/${id}`; return; }
+    document.getElementById("edit-body").innerHTML = await res.text();
+    document.getElementById("edit-heading").textContent = title;
+    dialog.showModal();
+  }
+  document.getElementById("edit-dialog").addEventListener("click", e => { if (e.target.tagName === "DIALOG") e.target.close(); });
+  function openApply(job) {
+    const dialog = document.getElementById("add-dialog");
+    dialog.querySelector("form").reset();
+    for (const [field, value] of [["job_id", job.id], ["company_name", job.company], ["title", job.title], ["url", job.url]]) {
+      document.getElementById(`add-${field}`).value = value;
+    }
+    document.getElementById("apply-heading").textContent = `${job.title} at ${job.company}`;
+    const ref = document.getElementById("add-job-ref");
+    ref.textContent = `Job ID ${job.id}`;
+    ref.dataset.copy = job.id;
+    dialog.showModal();
+    document.getElementById("add-cover_letter").focus();
+  }
+  document.getElementById("add-dialog").addEventListener("click", e => { if (e.target.tagName === "DIALOG") e.target.close(); });
   function openDismiss(id, title) {
     const dialog = document.getElementById("dismiss-dialog");
     dialog.querySelector("form").action = `/jobs/${id}/dismiss`;
     dialog.querySelector("#dismiss-title").textContent = title;
+    const ref = dialog.querySelector("#dismiss-job-ref");
+    ref.textContent = `Job ID ${id}`;
+    ref.dataset.copy = id;
     dialog.querySelector("textarea").value = "";
     dialog.showModal();
     dialog.querySelector("textarea").focus();

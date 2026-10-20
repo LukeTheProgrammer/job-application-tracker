@@ -44,6 +44,7 @@
   .flash { border-left:4px solid var(--pico-primary); background:var(--pico-card-background-color); padding:.6rem 1rem; margin-bottom:1.25rem; }
   .table-wrap { overflow-x:auto; }
   table { font-size:.9rem; }
+  th a.sort { color:inherit; text-decoration:none; }
   th { font-size:.8rem; text-transform:uppercase; letter-spacing:.03em; color:var(--pico-muted-color); }
   td form { margin:0; }
   tr.off td { opacity:.5; }
@@ -56,6 +57,7 @@
   form.inline { display:inline; margin:0; }
   button[type=submit] { width:auto; }
   .row button { width:100%; }
+  .copy-id { cursor:pointer; text-decoration:underline dotted; }
 </style>
 </head>
 <body>
@@ -69,5 +71,16 @@
   </ul>
 </nav>
 {% block body %}{% endblock %}
+<script>
+  // Any element with data-copy copies that value to the clipboard on click.
+  document.addEventListener("click", async e => {
+    const el = e.target.closest("[data-copy]");
+    if (!el || !el.dataset.copy) return;
+    await navigator.clipboard.writeText(el.dataset.copy);
+    const label = el.textContent;
+    el.textContent = "Copied!";
+    setTimeout(() => { el.textContent = label; }, 1200);
+  });
+</script>
 </body>
 </html>

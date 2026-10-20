@@ -82,7 +82,16 @@ def list_jobs(request: Request, filtered: bool = False, dismissed: bool = False,
     return templates.TemplateResponse(
         request,
         "jobs.html",
-        {"page": "jobs", "jobs": jobs, "view": view, "counts": counts, "tracked": tracked},
+        {
+            "page": "jobs",
+            "jobs": jobs,
+            "view": view,
+            "counts": counts,
+            "tracked": tracked,
+            "statuses": APPLICATION_STATUSES,
+            "blank": Application(status="Applied", applied_on=date.today(), company_name="", title="", url="", cover_letter="", notes=""),
+            "next": request.url.path + (f"?{request.url.query}" if request.url.query else ""),
+        },
     )
 
 
@@ -244,23 +253,27 @@ async def save_profile(
     return RedirectResponse("/profile?saved=1", status_code=303)
 
 
-@app.post("/jobs/{job_id}/track")
-def track_job(job_id: int, session: Session = Depends(get_session)) -> RedirectResponse:
-    job = session.get(Job, job_id)
-    if job is None:
-        raise HTTPException(404)
-    application = session.scalar(select(Application).where(Application.job_id == job_id))
-    if application is None:
-        application = Application(job=job, company_name=job.company_name, title=job.title, url=job.url)
-        session.add(application)
-        session.commit()
-    return RedirectResponse(f"/applications/{application.id}", status_code=303)
+APPLICATION_SORTS = {
+    "status": Application.status,
+    "title": func.lower(Application.title),
+    "company": func.lower(Application.company_name),
+    "applied_on": Application.applied_on,
+    "updated": Application.updated_at,
+}
 
 
 @app.get("/applications")
-def list_applications(request: Request, status: str = "", session: Session = Depends(get_session)):
+def list_applications(
+    request: Request, status: str = "", sort: str = "applied_on", dir: str = "desc", session: Session = Depends(get_session)
+):
     counts = dict(session.execute(select(Application.status, func.count()).group_by(Application.status)).all())
-    query = select(Application).order_by(Application.updated_at.desc())
+    if sort not in APPLICATION_SORTS:
+        sort = "applied_on"
+    if dir not in ("asc", "desc"):
+        dir = "desc"
+    column = APPLICATION_SORTS[sort]
+    order = column.asc().nulls_last() if dir == "asc" else column.desc().nulls_last()
+    query = select(Application).order_by(order, Application.updated_at.desc())
     if status:
         query = query.where(Application.status == status)
     return templates.TemplateResponse(
@@ -273,6 +286,8 @@ def list_applications(request: Request, status: str = "", session: Session = Dep
             "counts": counts,
             "total": sum(counts.values()),
             "current": status,
+            "sort": sort,
+            "dir": dir,
             "blank": Application(status="Applied", applied_on=date.today(), company_name="", title="", url="", cover_letter="", notes=""),
             "next": request.url.path + (f"?{request.url.query}" if request.url.query else ""),
         },
@@ -312,14 +327,19 @@ def add_application(
     applied_on: Annotated[str, Form()] = "",
     cover_letter: Annotated[str, Form()] = "",
     notes: Annotated[str, Form()] = "",
+    job_id: Annotated[str, Form()] = "",
     next: Annotated[str, Form()] = "",
     session: Session = Depends(get_session),
 ) -> RedirectResponse:
-    application = Application()
+    # Applying from the Jobs page links the job, reusing its application if one already exists.
+    job = session.get(Job, int(job_id)) if job_id.isdigit() else None
+    application = session.scalar(select(Application).where(Application.job_id == job.id)) if job else None
+    if application is None:
+        application = Application(job=job)
+        session.add(application)
     fill_application(application, company_name, title, status, url, applied_on, cover_letter, notes)
-    session.add(application)
     session.commit()
-    if next.startswith("/applications"):
+    if next.startswith(("/applications", "/jobs")):
         return RedirectResponse(next, status_code=303)
     return RedirectResponse(f"/applications/{application.id}", status_code=303)
 
