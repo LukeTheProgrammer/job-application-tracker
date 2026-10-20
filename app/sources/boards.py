@@ -111,13 +111,49 @@ async def fetch_himalayas(client: httpx.AsyncClient, slug: str) -> list[FetchedJ
     return jobs
 
 
-def builtin_posting(page: str) -> dict:
-    for script in re.findall(r'<script type="application/ld(?:\+|&#x2B;)json">(.*?)</script>', page, re.S):
-        data = json.loads(script)
+def jsonld_posting(page: str) -> dict:
+    """The schema.org JobPosting embedded in a page's JSON-LD, or {} if there isn't one."""
+    for script in re.findall(r'<script[^>]*type="application/ld(?:\+|&#x2B;)json"[^>]*>(.*?)</script>', page, re.S):
+        try:
+            data = json.loads(script)
+        except ValueError:
+            continue
         for node in data.get("@graph", [data]) if isinstance(data, dict) else data:
-            if isinstance(node, dict) and node.get("@type") == "JobPosting":
+            types = node.get("@type") if isinstance(node, dict) else None
+            if types == "JobPosting" or (isinstance(types, list) and "JobPosting" in types):
                 return node
     return {}
+
+
+def jsonld_job(posting: dict, url: str, external_id: str) -> FetchedJob:
+    address = posting.get("jobLocation") or {}
+    address = (address[0] if isinstance(address, list) and address else address).get("address") or {}
+    if isinstance(address, str):
+        location = address
+    else:
+        country = address.get("addressCountry")
+        country = country.get("name") if isinstance(country, dict) else country
+        location = ", ".join(p for p in (address.get("addressLocality"), address.get("addressRegion"), country) if p)
+    remote = posting.get("jobLocationType") == "TELECOMMUTE"
+    if remote:
+        location = f"Remote ({location})" if location else "Remote"
+    salary = posting.get("baseSalary") if isinstance(posting.get("baseSalary"), dict) else {}
+    value = salary.get("value") or {}
+    annual = isinstance(value, dict) and value.get("unitText") == "YEAR"
+    organization = posting.get("hiringOrganization") or {}
+    return FetchedJob(
+        external_id=external_id,
+        title=html_to_text(posting.get("title") or ""),
+        location=location,
+        is_remote=remote or mentions_remote(location),
+        url=url,
+        description=html_to_text(posting.get("description") or ""),
+        salary_min=int(float(value["minValue"])) if annual and value.get("minValue") else None,
+        salary_max=int(float(value["maxValue"])) if annual and value.get("maxValue") else None,
+        salary_currency=salary.get("currency") if annual else None,
+        posted_at=parse_iso(posting.get("datePosted")),
+        company=(organization.get("name") if isinstance(organization, dict) else organization) or "Unknown",
+    )
 
 
 async def fetch_builtin(client: httpx.AsyncClient, slug: str) -> list[FetchedJob]:
@@ -134,33 +170,10 @@ async def fetch_builtin(client: httpx.AsyncClient, slug: str) -> list[FetchedJob
     async def detail(path: str) -> FetchedJob | None:
         await asyncio.sleep(BUILTIN_DELAY_SECONDS)
         response = await request(client, "GET", f"https://builtin.com{path}", headers=BROWSER_HEADERS)
-        posting = builtin_posting(response.text)
+        posting = jsonld_posting(response.text)
         if not posting:
             return None
-        address = (posting.get("jobLocation") or {})
-        address = (address[0] if isinstance(address, list) and address else address).get("address") or {}
-        location = ", ".join(
-            p for p in (address.get("addressLocality"), address.get("addressRegion"), address.get("addressCountry")) if p
-        )
-        remote = posting.get("jobLocationType") == "TELECOMMUTE"
-        if remote:
-            location = f"Remote ({location})" if location else "Remote"
-        salary = posting.get("baseSalary") or {}
-        value = salary.get("value") or {}
-        annual = value.get("unitText") == "YEAR"
-        return FetchedJob(
-            external_id=path.rsplit("/", 1)[-1],
-            title=html_to_text(posting.get("title") or ""),
-            location=location,
-            is_remote=remote or mentions_remote(location),
-            url=f"https://builtin.com{path}",
-            description=html_to_text(posting.get("description") or ""),
-            salary_min=int(value["minValue"]) if annual and value.get("minValue") else None,
-            salary_max=int(value["maxValue"]) if annual and value.get("maxValue") else None,
-            salary_currency=salary.get("currency") if annual else None,
-            posted_at=parse_iso(posting.get("datePosted")),
-            company=(posting.get("hiringOrganization") or {}).get("name") or "Unknown",
-        )
+        return jsonld_job(posting, f"https://builtin.com{path}", path.rsplit("/", 1)[-1])
 
     return [job for job in await gather_limited((detail(path) for path in paths), limit=1) if job]
 

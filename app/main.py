@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_session
+from app.external import link_job
 from app.fetch import run_fetch
 from app.filters import apply_filters
 from app.stack import find_stack
@@ -338,6 +339,7 @@ def add_application(
         application = Application(job=job)
         session.add(application)
     fill_application(application, company_name, title, status, url, applied_on, cover_letter, notes)
+    link_job(session, application)
     session.commit()
     if next.startswith(("/applications", "/jobs")):
         return RedirectResponse(next, status_code=303)
@@ -381,6 +383,7 @@ def save_application(
     if application is None:
         raise HTTPException(404)
     fill_application(application, company_name, title, status, url, applied_on, cover_letter, notes)
+    link_job(session, application)
     session.commit()
     if next.startswith("/applications"):
         return RedirectResponse(next, status_code=303)

@@ -11,6 +11,7 @@ import sys
 from sqlalchemy import select
 
 from app.db import SessionLocal
+from app.external import link_job
 from app.models import Application, Job
 from app.profile import get_profile
 from app.scoring import plain
@@ -54,7 +55,10 @@ def save_new(company_name: str, title: str, url: str, letter_path: str) -> None:
     with SessionLocal() as session:
         application = Application(company_name=company_name, title=title, url=url, status="Preparing")
         session.add(application)
+        link_job(session, application)
         save(application, session, letter_path)
+        if application.job_id:
+            print(f"Linked to job {application.job_id}")
 
 
 if __name__ == "__main__":

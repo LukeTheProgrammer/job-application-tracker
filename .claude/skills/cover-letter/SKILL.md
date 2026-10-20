@@ -20,7 +20,7 @@ Write a short cover letter for one job, grounded in the user's resume. Never sen
    ```bash
    .venv/bin/python -m app.cover_letter save JOB_ID "$SCRATCH/letter-JOB_ID.txt"
    ```
-   This saves to the job's application, or creates one with status Preparing if there isn't one. For a job not in the database, use `save-new COMPANY TITLE URL LETTER_FILE` instead. Tell the user which application it went to, and if the output says it replaced an earlier letter, say so.
+   This saves to the job's application, or creates one with status Preparing if there isn't one. For a job not in the database, use `save-new COMPANY TITLE URL LETTER_FILE` instead; it also creates a Job from the posting URL and prints `Linked to job N` when that works. Tell the user which application it went to, and if the output says it replaced an earlier letter, say so.
 
 ## Format
 
