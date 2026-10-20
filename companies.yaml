@@ -1,6 +1,7 @@
 # Initial company list, loaded into the database only when the companies table is empty.
 # After that, add, remove and toggle companies on the Sources page.
-# ats: greenhouse | lever | ashby | workable | smartrecruiters
+# ats: greenhouse | lever | ashby | workable | smartrecruiters | recruitee | personio | bamboohr | workday | rippling
+# (workday's slug is the full careers URL; see the Companies page for each source's slug format)
 # slug: the board id in the company's careers-page links (e.g. boards.greenhouse.io/<slug>).
 
 # PHP / Laravel / WordPress / Drupal

@@ -39,6 +39,7 @@
   #edit-dialog textarea.letter, #add-dialog textarea.letter { min-height:14rem; }
   #edit-dialog .form-actions, #add-dialog .form-actions { position:sticky; bottom:calc(-1 * var(--pico-block-spacing-vertical)); margin:0 calc(-1 * var(--pico-block-spacing-horizontal)) calc(-1 * var(--pico-block-spacing-vertical)); padding:.75rem var(--pico-block-spacing-horizontal); background:var(--pico-card-sectioning-background-color); border-top:1px solid var(--pico-muted-border-color); text-align:right; }
   #edit-dialog .form-actions button, #add-dialog .form-actions button { margin:0; }
+  .tech { display:inline-block; border:1px solid var(--pico-muted-border-color); color:var(--pico-muted-color); border-radius:4px; padding:0 .3rem; font-size:.75rem; margin:.1rem .1rem 0 0; }
   .flags { margin-top:.3rem; }
   .flash { border-left:4px solid var(--pico-primary); background:var(--pico-card-background-color); padding:.6rem 1rem; margin-bottom:1.25rem; }
   .table-wrap { overflow-x:auto; }
@@ -63,6 +64,7 @@
     <li><a href="/jobs" {% if page == 'jobs' %}class="on"{% endif %}>Jobs</a></li>
     <li><a href="/applications" {% if page == 'applications' %}class="on"{% endif %}>Applications</a></li>
     <li><a href="/sources" {% if page == 'sources' %}class="on"{% endif %}>Sources</a></li>
+    <li><a href="/companies" {% if page == 'companies' %}class="on"{% endif %}>Companies</a></li>
     <li><a href="/profile" {% if page == 'profile' %}class="on"{% endif %}>Profile</a></li>
   </ul>
 </nav>

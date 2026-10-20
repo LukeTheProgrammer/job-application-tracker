@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.db import get_session
 from app.fetch import run_fetch
 from app.filters import apply_filters
+from app.stack import find_stack
 from app.models import APPLICATION_STATUSES, Application, Company, Job, Source
 from app.profile import extract_resume_text, get_profile, parse_list
 from app.seed import seed
@@ -43,6 +44,7 @@ def workplace(job) -> str:
 
 templates.env.filters["age"] = age
 templates.env.filters["workplace"] = workplace
+templates.env.filters["stack"] = lambda job: find_stack(f"{job.title}\n{job.description or ''}")
 
 
 @app.on_event("startup")
@@ -110,7 +112,6 @@ def restore_job(job_id: int, session: Session = Depends(get_session)) -> Redirec
 def show_sources(request: Request, message: str = "", session: Session = Depends(get_session)):
     sources = session.scalars(select(Source)).all()
     sources = sorted(sources, key=lambda s: list(ATS_NAMES).index(s.key) if s.key in ATS_NAMES else len(ATS_NAMES))
-    companies = session.scalars(select(Company).order_by(func.lower(Company.name))).all()
     company_counts = dict(session.execute(select(Company.ats, func.count()).group_by(Company.ats)).all())
     return templates.TemplateResponse(
         request,
@@ -120,9 +121,7 @@ def show_sources(request: Request, message: str = "", session: Session = Depends
             "message": message,
             "sources": sources,
             "names": ATS_NAMES,
-            "enabled_sources": {s.key: s.enabled for s in sources},
             "company_counts": company_counts,
-            "companies": companies,
             "last_fetch": session.scalar(select(func.max(Company.last_fetched_at))),
         },
     )
@@ -144,6 +143,24 @@ def toggle_source(key: str, session: Session = Depends(get_session)) -> Redirect
     return RedirectResponse("/sources", status_code=303)
 
 
+@app.get("/companies")
+def show_companies(request: Request, message: str = "", session: Session = Depends(get_session)):
+    sources = session.scalars(select(Source)).all()
+    sources = sorted(sources, key=lambda s: list(ATS_NAMES).index(s.key) if s.key in ATS_NAMES else len(ATS_NAMES))
+    return templates.TemplateResponse(
+        request,
+        "companies.html",
+        {
+            "page": "companies",
+            "message": message,
+            "sources": sources,
+            "names": ATS_NAMES,
+            "enabled_sources": {s.key: s.enabled for s in sources},
+            "companies": session.scalars(select(Company).order_by(func.lower(Company.name))).all(),
+        },
+    )
+
+
 @app.post("/companies")
 def add_company(
     name: Annotated[str, Form()],
@@ -157,8 +174,8 @@ def add_company(
     try:
         session.commit()
     except IntegrityError:
-        return RedirectResponse("/sources?message=That+board+is+already+in+the+list.", status_code=303)
-    return RedirectResponse("/sources?message=Added.+It+will+be+fetched+on+the+next+run.", status_code=303)
+        return RedirectResponse("/companies?message=That+board+is+already+in+the+list.", status_code=303)
+    return RedirectResponse("/companies?message=Added.+It+will+be+fetched+on+the+next+run.", status_code=303)
 
 
 @app.post("/companies/{company_id}/toggle")
@@ -168,7 +185,7 @@ def toggle_company(company_id: int, session: Session = Depends(get_session)) -> 
         raise HTTPException(404)
     company.enabled = not company.enabled
     session.commit()
-    return RedirectResponse("/sources", status_code=303)
+    return RedirectResponse("/companies", status_code=303)
 
 
 @app.post("/companies/{company_id}/delete")
@@ -177,7 +194,7 @@ def delete_company(company_id: int, session: Session = Depends(get_session)) -> 
     if company is not None:
         session.delete(company)
         session.commit()
-    return RedirectResponse("/sources", status_code=303)
+    return RedirectResponse("/companies", status_code=303)
 
 
 @app.get("/profile")

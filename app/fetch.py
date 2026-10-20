@@ -18,7 +18,7 @@ from app.filters import apply_filters
 from app.models import Company, Job, Source
 from app.profile import get_profile
 from app.seed import seed
-from app.sources import ATS_FETCHERS, FetchedJob
+from app.sources import ATS_FETCHERS, BOARD_NAMES, FetchedJob
 
 log = logging.getLogger("jobs.fetch")
 
@@ -50,15 +50,20 @@ async def fetch_boards(companies: list[Company]) -> dict[int, list[FetchedJob] |
 
 
 def store(session: Session, company: Company, fetched: list[FetchedJob], now: datetime) -> None:
-    by_key = {dedupe_key(company.name, job.title, job.location): job for job in fetched}
+    # Board feeds name the hiring company per posting; for an ATS board it's the company itself.
+    by_key = {dedupe_key(job.company or company.name, job.title, job.location): job for job in fetched}
     existing = {job.dedupe_key: job for job in session.scalars(select(Job).where(Job.dedupe_key.in_(by_key)))}
 
     for key, job in by_key.items():
         row = existing.get(key)
         if row is None:
-            row = Job(dedupe_key=key, source=company.ats, company_name=company.name, first_seen_at=now)
+            row = Job(dedupe_key=key, source=company.ats, company_name=(job.company or company.name)[:200], first_seen_at=now)
             session.add(row)
+        elif row.company_id != company.id and row.active and row.source not in BOARD_NAMES:
+            # Already live on the company's own ATS board; keep that row's direct link.
+            continue
         row.company_id = company.id
+        row.source = company.ats
         row.title = job.title[:500]
         row.location = job.location[:500]
         row.is_remote = job.is_remote

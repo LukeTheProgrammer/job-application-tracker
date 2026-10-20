@@ -19,7 +19,8 @@
         <td>{% if job.score is not none %}<span class="score {% if job.score >= 60 %}high{% elif job.score >= 35 %}mid{% else %}low{% endif %}">{{ job.score }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
         <td class="muted">{{ job.posted_at | age }}</td>
         <td><a href="{{ job.url }}" target="_blank" rel="noopener">{{ job.title }}</a>
-          {% if job.score_reason %}<div class="reason">{{ job.score_reason }}</div>{% if job.red_flags %}<div class="flags">{% for f in job.red_flags %}<span class="flag">{{ f }}</span> {% endfor %}</div>{% endif %}{% endif %}</td>
+          {% if job.score_reason %}<div class="reason">{{ job.score_reason }}</div>{% if job.red_flags %}<div class="flags">{% for f in job.red_flags %}<span class="flag">{{ f }}</span> {% endfor %}</div>{% endif %}{% endif %}
+          {% set stack = job | stack %}{% if stack %}<div class="flags">{% for t in stack %}<span class="tech">{{ t }}</span> {% endfor %}</div>{% endif %}</td>
         <td>{{ job.company_name }}</td>
         <td title="{{ job.location or '' }}">{{ job | workplace }}</td>
         <td class="muted">{% if job.salary_max %}{{ '{:,.0f}'.format(job.salary_min or 0) }}–{{ '{:,.0f}'.format(job.salary_max) }} {{ job.salary_currency or '' }}{% else %}—{% endif %}</td>

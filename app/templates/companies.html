@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Companies{% endblock %}
+{% block body %}
+<main class="container">
+  <h1>Companies</h1>
+  {% if message %}<div class="flash">{{ message }}</div>{% endif %}
+
+  <form method="post" action="/companies" class="row" style="align-items:end; margin-bottom:1rem">
+    <div><label for="name">Name</label><input type="text" id="name" name="name" required></div>
+    <div><label for="ats">ATS</label>
+      <select id="ats" name="ats">{% for source in sources %}<option value="{{ source.key }}">{{ names[source.key] }}</option>{% endfor %}</select></div>
+    <div><label for="slug">Board slug <span class="hint">from the careers-page link</span></label><input type="text" id="slug" name="slug" required></div>
+    <div><button type="submit">Add company</button></div>
+  </form>
+  <details class="muted" style="margin-bottom:1rem">
+    <summary>What goes in the slug</summary>
+    <ul>
+      <li>Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Rippling: the board id in the careers link (<code>ats.rippling.com/<b>acme</b>/jobs</code>).</li>
+      <li>Recruitee, Personio, BambooHR: the subdomain (<code><b>acme</b>.recruitee.com</code>, <code><b>acme</b>.jobs.personio.de</code>, <code><b>acme</b>.bamboohr.com</code>).</li>
+      <li>Workday: the whole careers URL, e.g. <code>https://acme.wd5.myworkdayjobs.com/External</code>.</li>
+      <li>Job boards (the name is just a label for the search): Working Nomads takes a category such as <code>Development</code> or <code>all</code>; Jobicy an industry such as <code>engineering</code>; Himalayas a search query; Built In a listing path such as <code>jobs/remote/dev-engineering</code> or <code>jobs/kansas-city/dev-engineering</code>.</li>
+    </ul>
+  </details>
+  <div class="table-wrap">
+    <table>
+      <tr><th style="width:3rem">On</th><th>Company</th><th>ATS / slug</th><th>Last fetch</th><th></th></tr>
+      {% for company in companies %}
+      <tr class="{% if not company.enabled or not enabled_sources[company.ats] %}off{% endif %}">
+        <td>
+          <form method="post" action="/companies/{{ company.id }}/toggle">
+            <input type="checkbox" role="switch" aria-label="Enable {{ company.name }}" {% if company.enabled %}checked{% endif %} onchange="this.form.submit()">
+          </form>
+        </td>
+        <td>{{ company.name }}</td>
+        <td class="muted">{{ names[company.ats] }} / {{ company.slug }}</td>
+        <td>
+          {% if company.last_error %}<span class="warn" title="{{ company.last_error }}">Error</span>
+          {% elif company.last_fetched_at %}<span class="muted">{{ company.last_job_count }} jobs · {{ company.last_fetched_at | age }} ago</span>
+          {% else %}<span class="muted">Never</span>{% endif %}
+        </td>
+        <td>
+          <form method="post" action="/companies/{{ company.id }}/delete">
+            <button class="ghost" type="submit" aria-label="Remove {{ company.name }}">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</main>
+{% endblock %}

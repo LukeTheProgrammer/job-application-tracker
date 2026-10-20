@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-ATS fetchers, hard filters, application tracking, and the Jobs/Applications/Sources/Profile pages are built. Automatic LLM scoring, the remote boards, JobSpy and applied/not-interested feedback are not built yet. `index.html` is a leftover static placeholder for jobs.realm-of-tuba.com. The FastAPI app is meant to sit behind the web server as a reverse proxy.
+ATS fetchers, hard filters, application tracking, and the Jobs/Applications/Sources/Profile pages are built. Automatic LLM scoring, RemoteOK/Remotive/WWR, JobSpy and applied/not-interested feedback are not built yet. `index.html` is a leftover static placeholder for jobs.realm-of-tuba.com. The FastAPI app is meant to sit behind the web server as a reverse proxy.
 
 ## Commands
 
@@ -22,7 +22,8 @@ Production: systemd unit `jobs.service` runs uvicorn on 127.0.0.1:8000 as `luke`
 ## Layout
 
 - `app/models.py`: `Profile` is a single-row table (id always 1) holding the resume text and every search preference. The filters and scorer must read their settings from it, not from config files. `Source` holds on/off switches keyed by ATS name. `Company` is one board (ats + slug). `Job` is one deduped posting.
-- `app/sources/ats.py`: one async fetcher per ATS, each normalizing to `FetchedJob`. Add a new source by adding a fetcher to `ATS_FETCHERS` and a label to `ATS_NAMES`. `seed()` creates its `Source` row automatically.
+- `app/sources/ats.py`: one async fetcher per ATS, each normalizing to `FetchedJob`. Add a new source by adding a fetcher to `ATS_FETCHERS` and a label to `ATS_NAMES`. `seed()` creates its `Source` row automatically. Fetchers that need a request per posting (BambooHR, Workday, Rippling) go through `request()` (retries 429/503) and `gather_limited()`. A Workday slug is the full careers URL, and only postings under 30 days old get detail requests.
+- `app/sources/boards.py`: multi-company job boards (Working Nomads, Jobicy, Himalayas, Built In). Each saved search is a `Company` row whose slug is the search, and each posting sets `FetchedJob.company`. `BOARD_DEFAULTS` seeds one search when a board is first added. `app/sources/__init__.py` merges boards into `ATS_FETCHERS`/`ATS_NAMES`. Built In has no API: it scrapes listing pages plus each job's JSON-LD, one request per second, because it rate-limits bursts. In `store()`, a board posting that matches a live ATS posting is skipped so the ATS link wins.
 - `app/fetch.py`: `run_fetch` fetches enabled companies of enabled sources concurrently. A failing board is recorded in `Company.last_error` and doesn't abort the run. Postings missing from a successful fetch are marked `active=False`. A Postgres advisory lock prevents overlapping runs, whether started by the timer or by the "Fetch now" button.
 - `app/filters.py`: `apply_filters` re-evaluates every active job and stores the first failed rule in `Job.filter_reason` (`NULL` = match). It runs after every fetch and every profile save, so profile changes take effect immediately. Excluded stacks match titles only; descriptions are left to the LLM scorer.
 - `Application` (in `app/models.py`): a tracked application with status (`APPLICATION_STATUSES`), applied date, cover letter and notes. It snapshots company/title/url and its `job_id` is `SET NULL` on delete, so it survives removal of the company or job and can also be a job found elsewhere.
@@ -40,8 +41,8 @@ This app finds job postings worth applying to and ranks them. It never applies a
 **Stack:** Python, httpx, PostgreSQL (not SQLite), the Anthropic SDK, and a FastAPI web UI. Results go to the web UI. There is no email digest. The fetch pipeline runs on cron several times a day, because applying within 48 hours of posting matters.
 
 **Sources:**
-- Company ATS boards through their public JSON APIs: Greenhouse, Lever, Ashby, Workable and SmartRecruiters. This is the primary source. SmartRecruiters' listing API returns no description.
-- Remote boards: RemoteOK API, Remotive API, We Work Remotely RSS.
+- Company ATS boards through their public APIs: Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Recruitee, Personio, BambooHR, Workday and Rippling. This is the primary source. SmartRecruiters' listing API returns no description.
+- Job boards: Working Nomads, Jobicy, Himalayas, Built In (built); RemoteOK API, Remotive API, We Work Remotely RSS (planned).
 - JobSpy for LinkedIn and Indeed. Expect blocks and breakage, so it must fail soft and never stop the other sources from running.
 - Deliberately excluded: Gmail alert parsing, HN "Who is Hiring", Adzuna and USAJobs. Don't add these back without asking.
 
