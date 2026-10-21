@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}{% endblock %} · Jobs</title>
+<script>
+  // Apply the saved theme before first paint; with nothing saved, Pico follows the OS setting.
+  try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+</script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css">
 <style>
   /* Pico handles base typography, forms, buttons, tables and dark mode. Below: tweaks and app-specific bits. */
@@ -57,6 +61,7 @@
   form.inline { display:inline; margin:0; }
   button[type=submit] { width:auto; }
   .row button { width:100%; }
+  #theme-toggle { font-size:1rem; line-height:1; }
   .copy-id { cursor:pointer; text-decoration:underline dotted; }
 </style>
 </head>
@@ -69,9 +74,25 @@
     <li><a href="/companies" {% if page == 'companies' %}class="on"{% endif %}>Companies</a></li>
     <li><a href="/profile" {% if page == 'profile' %}class="on"{% endif %}>Profile</a></li>
   </ul>
+  <ul>
+    <li><button type="button" id="theme-toggle" class="ghost" aria-label="Toggle light/dark theme"></button></li>
+  </ul>
 </nav>
 {% block body %}{% endblock %}
 <script>
+  // Theme toggle: flips between light and dark and remembers the choice.
+  const themeBtn = document.getElementById("theme-toggle");
+  const currentTheme = () => document.documentElement.dataset.theme
+    || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  const showTheme = () => { themeBtn.textContent = currentTheme() === "dark" ? "☀️" : "🌙"; };
+  themeBtn.addEventListener("click", () => {
+    const next = currentTheme() === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("theme", next); } catch {}
+    showTheme();
+  });
+  showTheme();
+
   // Any element with data-copy copies that value to the clipboard on click.
   document.addEventListener("click", async e => {
     const el = e.target.closest("[data-copy]");
