@@ -6,13 +6,27 @@ postings carry their own company name in FetchedJob.company.
 """
 
 import asyncio
-import json
+import html
 import re
-from datetime import UTC, datetime
+import xml.etree.ElementTree as ET
+from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 
 import httpx
 
-from app.sources.ats import FetchedJob, gather_limited, html_to_text, mentions_remote, parse_iso, request
+from app.sources.ats import (
+    BROWSER_HEADERS,
+    FetchedJob,
+    gather_limited,
+    html_to_text,
+    jsonld_details,
+    jsonld_job,
+    jsonld_posting,
+    mentions_remote,
+    meta,
+    parse_iso,
+    request,
+)
 
 # Postings older than this are skipped while paging, since the age filter would drop them anyway.
 MAX_AGE_DAYS = 30
@@ -20,8 +34,6 @@ BUILTIN_MAX_PAGES = 5
 # Built In rate-limits bursts, so its detail pages are fetched one at a time with a pause.
 BUILTIN_DELAY_SECONDS = 1
 HIMALAYAS_MAX_PAGES = 10
-# Built In serves HTML only and turns away obvious bots.
-BROWSER_HEADERS = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) jobs-finder/0.1"}
 
 
 def too_old(posted_at: datetime | None) -> bool:
@@ -111,51 +123,6 @@ async def fetch_himalayas(client: httpx.AsyncClient, slug: str) -> list[FetchedJ
     return jobs
 
 
-def jsonld_posting(page: str) -> dict:
-    """The schema.org JobPosting embedded in a page's JSON-LD, or {} if there isn't one."""
-    for script in re.findall(r'<script[^>]*type="application/ld(?:\+|&#x2B;)json"[^>]*>(.*?)</script>', page, re.S):
-        try:
-            data = json.loads(script)
-        except ValueError:
-            continue
-        for node in data.get("@graph", [data]) if isinstance(data, dict) else data:
-            types = node.get("@type") if isinstance(node, dict) else None
-            if types == "JobPosting" or (isinstance(types, list) and "JobPosting" in types):
-                return node
-    return {}
-
-
-def jsonld_job(posting: dict, url: str, external_id: str) -> FetchedJob:
-    address = posting.get("jobLocation") or {}
-    address = (address[0] if isinstance(address, list) and address else address).get("address") or {}
-    if isinstance(address, str):
-        location = address
-    else:
-        country = address.get("addressCountry")
-        country = country.get("name") if isinstance(country, dict) else country
-        location = ", ".join(p for p in (address.get("addressLocality"), address.get("addressRegion"), country) if p)
-    remote = posting.get("jobLocationType") == "TELECOMMUTE"
-    if remote:
-        location = f"Remote ({location})" if location else "Remote"
-    salary = posting.get("baseSalary") if isinstance(posting.get("baseSalary"), dict) else {}
-    value = salary.get("value") or {}
-    annual = isinstance(value, dict) and value.get("unitText") == "YEAR"
-    organization = posting.get("hiringOrganization") or {}
-    return FetchedJob(
-        external_id=external_id,
-        title=html_to_text(posting.get("title") or ""),
-        location=location,
-        is_remote=remote or mentions_remote(location),
-        url=url,
-        description=html_to_text(posting.get("description") or ""),
-        salary_min=int(float(value["minValue"])) if annual and value.get("minValue") else None,
-        salary_max=int(float(value["maxValue"])) if annual and value.get("maxValue") else None,
-        salary_currency=salary.get("currency") if annual else None,
-        posted_at=parse_iso(posting.get("datePosted")),
-        company=(organization.get("name") if isinstance(organization, dict) else organization) or "Unknown",
-    )
-
-
 async def fetch_builtin(client: httpx.AsyncClient, slug: str) -> list[FetchedJob]:
     """slug: a listing path from builtin.com, e.g. "jobs/remote/dev-engineering"."""
     base = "https://builtin.com/" + re.sub(r"^(https?://)?(www\.)?builtin\.com/", "", slug).strip("/")
@@ -169,7 +136,13 @@ async def fetch_builtin(client: httpx.AsyncClient, slug: str) -> list[FetchedJob
 
     async def detail(path: str) -> FetchedJob | None:
         await asyncio.sleep(BUILTIN_DELAY_SECONDS)
-        response = await request(client, "GET", f"https://builtin.com{path}", headers=BROWSER_HEADERS)
+        try:
+            response = await request(client, "GET", f"https://builtin.com{path}", headers=BROWSER_HEADERS)
+        except httpx.HTTPStatusError as exc:
+            # A posting taken down between the listing and its detail request; skip just that one.
+            if exc.response.status_code in (404, 410):
+                return None
+            raise
         posting = jsonld_posting(response.text)
         if not posting:
             return None
@@ -178,11 +151,230 @@ async def fetch_builtin(client: httpx.AsyncClient, slug: str) -> list[FetchedJob
     return [job for job in await gather_limited((detail(path) for path in paths), limit=1) if job]
 
 
+async def fetch_remoteok(client: httpx.AsyncClient, slug: str) -> list[FetchedJob]:
+    """slug: a tag such as "php" or "dev", or "all"."""
+    response = await client.get("https://remoteok.com/api", headers=BROWSER_HEADERS)
+    response.raise_for_status()
+    jobs = []
+    # The first element is the API's legal notice, not a job. The API ignores its tag parameter,
+    # so the tag is matched here.
+    for job in response.json():
+        if "id" not in job or (slug.lower() != "all" and slug.lower() not in (job.get("tags") or [])):
+            continue
+        location = job.get("location") or ""
+        jobs.append(
+            FetchedJob(
+                external_id=str(job["id"]),
+                title=html_to_text(job["position"]),
+                location=f"Remote ({location})" if location else "Remote",
+                is_remote=True,
+                url=job["url"],
+                description=html_to_text(job.get("description") or ""),
+                # RemoteOK reports 0 for an unlisted salary.
+                salary_min=job.get("salary_min") or None,
+                salary_max=job.get("salary_max") or None,
+                salary_currency="USD" if job.get("salary_min") else None,
+                posted_at=parse_iso(job.get("date")),
+                company=html_to_text(job["company"]),
+            )
+        )
+    return jobs
+
+
+async def fetch_remotive(client: httpx.AsyncClient, slug: str) -> list[FetchedJob]:
+    """slug: a Remotive category such as "software-dev"."""
+    response = await client.get("https://remotive.com/api/remote-jobs", params={"category": slug})
+    response.raise_for_status()
+    jobs = []
+    for job in response.json().get("jobs") or []:
+        # Remotive's salary is free text ("$120k - $150k", "$1000 per task"), so it isn't parsed.
+        region = job.get("candidate_required_location") or ""
+        jobs.append(
+            FetchedJob(
+                external_id=str(job["id"]),
+                title=job["title"],
+                location=f"Remote ({region})" if region else "Remote",
+                is_remote=True,
+                url=job["url"],
+                description=html_to_text(job.get("description") or ""),
+                posted_at=parse_iso(job.get("publication_date")),
+                company=job["company_name"],
+            )
+        )
+    return jobs
+
+
+async def fetch_weworkremotely(client: httpx.AsyncClient, slug: str) -> list[FetchedJob]:
+    """slug: a category feed name such as "remote-full-stack-programming-jobs"."""
+    response = await client.get(f"https://weworkremotely.com/categories/{slug}.rss", headers=BROWSER_HEADERS)
+    response.raise_for_status()
+    jobs = []
+    for item in ET.fromstring(response.content).iter("item"):
+        # Titles read "Company: Job title".
+        company, _, title = (item.findtext("title") or "").partition(": ")
+        region = item.findtext("region") or ""
+        pub = item.findtext("pubDate")
+        url = item.findtext("link") or item.findtext("guid") or ""
+        jobs.append(
+            FetchedJob(
+                external_id=url,
+                title=title or company,
+                location=f"Remote ({region})" if region else "Remote",
+                is_remote=True,
+                url=url,
+                description=html_to_text(item.findtext("description") or ""),
+                posted_at=parsedate_to_datetime(pub) if pub else None,
+                company=company if title else "Unknown",
+            )
+        )
+    return jobs
+
+
+AGE_UNITS = {"h": 1 / 24, "d": 1, "w": 7, "mo": 30, "y": 365}
+
+
+def parse_age(text: str) -> datetime | None:
+    """Turn a relative age such as "3d" or "2w" into a posting date."""
+    match = re.fullmatch(r"(\d+)\s*(mo|[hdwy])", text.strip())
+    if not match:
+        return None
+    return datetime.now(UTC) - timedelta(days=int(match.group(1)) * AGE_UNITS[match.group(2)])
+
+
+async def fetch_larajobs(client: httpx.AsyncClient, slug: str) -> list[FetchedJob]:
+    """slug: "all" for the front page, or a listing path such as "vuejs-jobs".
+
+    The API and RSS feed list only a few postings, so this reads the listing page's cards, then each
+    employer's posting page (where the apply link leads) for a description.
+    """
+    path = "" if slug.lower() == "all" else slug.strip("/")
+    response = await request(client, "GET", f"https://larajobs.com/{path}", headers=BROWSER_HEADERS)
+    cards = re.findall(r'<a data-url="([^"]*)" href="/job/(\d+)"[^>]*>(.*?)</a>', response.text, re.S)
+
+    async def card_job(apply_url: str, job_id: str, card: str) -> FetchedJob:
+        card = re.sub(r"<svg.*?</svg>", "", card, flags=re.S)
+        # Card text in order: company, title, job type, "- salary" (optional), location, age, tags.
+        parts = [html_to_text(p) for p in re.split(r"<[^>]+>", card)]
+        parts = [p for p in parts if p]
+        company, title, rest = parts[0], parts[1], parts[3:]
+        salary = rest.pop(0).lstrip("- ") if rest and rest[0].startswith("-") else ""
+        location = rest[0] if rest else ""
+        posted_at = parse_age(rest[1]) if len(rest) > 1 else None
+        apply_url = html.unescape(re.sub(r"[?&]utm_source=Larajobs", "", apply_url))
+        try:
+            page = (await request(client, "GET", apply_url, headers=BROWSER_HEADERS)).text
+        except httpx.HTTPError:
+            page = ""
+        posting = jsonld_posting(page)
+        if posting:
+            description = html_to_text(posting.get("description") or "")
+        else:
+            description = meta(page, "og:description") or meta(page, "description")
+        if salary:
+            description = f"Salary: {salary}\n\n{description}"
+        return FetchedJob(
+            external_id=job_id,
+            title=title,
+            location=location,
+            is_remote=mentions_remote(location),
+            url=apply_url,
+            description=description,
+            posted_at=posted_at,
+            company=company,
+        )
+
+    return await gather_limited(card_job(*card) for card in cards)
+
+
+async def fetch_vuejobs(client: httpx.AsyncClient, slug: str) -> list[FetchedJob]:
+    """slug: "remote" for remote postings only, or "all".
+
+    The feed lists over a thousand postings with truncated descriptions, so only recent ones that
+    pass the slug's location check get a detail request for the full JSON-LD posting.
+    """
+    response = await client.get("https://vuejobs.com/feed", headers=BROWSER_HEADERS)
+    response.raise_for_status()
+    urls: dict[str, str] = {}
+    for item in ET.fromstring(response.content).iter("item"):
+        pub = item.findtext("pubDate")
+        if pub and too_old(parsedate_to_datetime(pub)):
+            continue
+        match = re.search(r"Location:</strong>\s*(.*?)</p>", item.findtext("description") or "")
+        if slug.lower() == "remote" and not (match and mentions_remote(match.group(1))):
+            continue
+        url = (item.findtext("guid") or "").strip()
+        urls[url] = url
+    return await jsonld_details(client, urls)
+
+
+JOBSPY_SITES = ["indeed", "linkedin"]
+JOBSPY_RESULTS = 30
+# Covers several runs of the 3-hourly timer, so a run that gets blocked doesn't lose postings.
+JOBSPY_HOURS_OLD = 72
+
+
+def jobspy_value(row: dict, key: str):
+    """JobSpy rows are pandas records, where a missing value is NaN."""
+    value = row.get(key)
+    return None if value is None or value != value else value
+
+
+async def fetch_jobspy(client: httpx.AsyncClient, slug: str) -> list[FetchedJob]:
+    """slug: a search query such as "senior laravel developer", run on Indeed and LinkedIn for US remote jobs.
+
+    LinkedIn and Indeed block scrapers often. JobSpy logs those failures instead of raising, so an
+    empty result is reported as an error rather than marking every earlier posting inactive.
+    """
+    from jobspy import scrape_jobs  # heavy import (pandas); only needed when this source runs
+
+    frame = await asyncio.to_thread(
+        scrape_jobs,
+        site_name=JOBSPY_SITES,
+        search_term=slug,
+        location="United States",
+        is_remote=True,
+        results_wanted=JOBSPY_RESULTS,
+        hours_old=JOBSPY_HOURS_OLD,
+        country_indeed="USA",
+        fetch_description=True,
+    )
+    if frame.empty:
+        raise RuntimeError("JobSpy returned no postings (LinkedIn/Indeed may be blocking requests)")
+    jobs = []
+    for row in frame.to_dict("records"):
+        location = jobspy_value(row, "location") or ""
+        remote = bool(jobspy_value(row, "is_remote"))
+        annual = jobspy_value(row, "interval") == "yearly"
+        posted = jobspy_value(row, "date_posted")
+        jobs.append(
+            FetchedJob(
+                external_id=row["id"],
+                title=row["title"],
+                location=f"Remote ({location})" if remote and not mentions_remote(location) else location,
+                is_remote=remote or mentions_remote(location),
+                url=jobspy_value(row, "job_url_direct") or row["job_url"],
+                description=jobspy_value(row, "description") or "",
+                salary_min=int(row["min_amount"]) if annual and jobspy_value(row, "min_amount") else None,
+                salary_max=int(row["max_amount"]) if annual and jobspy_value(row, "max_amount") else None,
+                salary_currency=jobspy_value(row, "currency") if annual else None,
+                posted_at=datetime(posted.year, posted.month, posted.day, tzinfo=UTC) if posted else None,
+                company=jobspy_value(row, "company") or "Unknown",
+            )
+        )
+    return jobs
+
+
 BOARD_FETCHERS = {
     "workingnomads": fetch_workingnomads,
     "jobicy": fetch_jobicy,
     "himalayas": fetch_himalayas,
     "builtin": fetch_builtin,
+    "remoteok": fetch_remoteok,
+    "remotive": fetch_remotive,
+    "weworkremotely": fetch_weworkremotely,
+    "larajobs": fetch_larajobs,
+    "vuejobs": fetch_vuejobs,
+    "jobspy": fetch_jobspy,
 }
 
 BOARD_NAMES = {
@@ -190,6 +382,12 @@ BOARD_NAMES = {
     "jobicy": "Jobicy",
     "himalayas": "Himalayas",
     "builtin": "Built In",
+    "remoteok": "RemoteOK",
+    "remotive": "Remotive",
+    "weworkremotely": "We Work Remotely",
+    "larajobs": "LaraJobs",
+    "vuejobs": "VueJobs",
+    "jobspy": "JobSpy (LinkedIn + Indeed)",
 }
 
 # The saved search each board starts with; more can be added on the Companies page.
@@ -198,4 +396,10 @@ BOARD_DEFAULTS = {
     "jobicy": ("Jobicy: Engineering", "engineering"),
     "himalayas": ("Himalayas: software engineer", "software engineer"),
     "builtin": ("Built In: remote dev & engineering", "jobs/remote/dev-engineering"),
+    "remoteok": ("RemoteOK: dev", "dev"),
+    "remotive": ("Remotive: software development", "software-dev"),
+    "weworkremotely": ("We Work Remotely: full-stack", "remote-full-stack-programming-jobs"),
+    "larajobs": ("LaraJobs: all", "all"),
+    "vuejobs": ("VueJobs: remote", "remote"),
+    "jobspy": ("JobSpy: senior laravel developer", "senior laravel developer"),
 }

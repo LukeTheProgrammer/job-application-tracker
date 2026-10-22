@@ -1,7 +1,6 @@
 """Jobs found outside the fetch pipeline: build a Job from a posting URL so an application can link to it."""
 
 import hashlib
-import html
 import logging
 import re
 
@@ -11,17 +10,11 @@ from sqlalchemy.orm import Session
 
 from app.fetch import dedupe_key
 from app.models import Application, Job
-from app.sources.ats import FetchedJob, html_to_text
-from app.sources.boards import BROWSER_HEADERS, jsonld_job, jsonld_posting
+from app.sources.ats import BROWSER_HEADERS, FetchedJob, html_to_text, jsonld_job, jsonld_posting, meta
 
 log = logging.getLogger("jobs.external")
 
 SOURCE = "external"
-
-
-def meta(page: str, name: str) -> str:
-    match = re.search(rf'<meta[^>]+(?:property|name)="{name}"[^>]+content="([^"]*)"', page, re.I)
-    return html.unescape(match.group(1)).strip() if match else ""
 
 
 def fetch_posting(url: str) -> FetchedJob | None:

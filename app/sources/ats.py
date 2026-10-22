@@ -6,14 +6,19 @@ errors; the caller records the error against the company and moves on.
 
 import asyncio
 import html
+import json
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 
 import httpx
+
+# Sites that serve HTML only (Built In, iCIMS, LaraJobs) turn away obvious bots.
+BROWSER_HEADERS = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) jobs-finder/0.1"}
 
 
 @dataclass
@@ -46,6 +51,11 @@ def parse_iso(value: str | None) -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
+def meta(page: str, name: str) -> str:
+    match = re.search(rf'<meta[^>]+(?:property|name)="{name}"[^>]+content="([^"]*)"', page, re.I)
+    return html.unescape(match.group(1)).strip() if match else ""
+
+
 def mentions_remote(text: str) -> bool:
     return bool(re.search(r"\bremote\b", text, re.I))
 
@@ -71,6 +81,51 @@ async def gather_limited[T](coros: Iterable[Awaitable[T]], limit: int = 3) -> li
             return await coro
 
     return await asyncio.gather(*(one(c) for c in coros))
+
+
+def jsonld_posting(page: str) -> dict:
+    """The schema.org JobPosting embedded in a page's JSON-LD, or {} if there isn't one."""
+    for script in re.findall(r'<script[^>]*type="application/ld(?:\+|&#x2B;)json"[^>]*>(.*?)</script>', page, re.S):
+        try:
+            data = json.loads(script)
+        except ValueError:
+            continue
+        for node in data.get("@graph", [data]) if isinstance(data, dict) else data:
+            types = node.get("@type") if isinstance(node, dict) else None
+            if types == "JobPosting" or (isinstance(types, list) and "JobPosting" in types):
+                return node
+    return {}
+
+
+def jsonld_job(posting: dict, url: str, external_id: str) -> FetchedJob:
+    address = posting.get("jobLocation") or {}
+    address = (address[0] if isinstance(address, list) and address else address).get("address") or {}
+    if isinstance(address, str):
+        location = address
+    else:
+        country = address.get("addressCountry")
+        country = country.get("name") if isinstance(country, dict) else country
+        location = ", ".join(p for p in (address.get("addressLocality"), address.get("addressRegion"), country) if p)
+    remote = posting.get("jobLocationType") == "TELECOMMUTE"
+    if remote:
+        location = f"Remote ({location})" if location else "Remote"
+    salary = posting.get("baseSalary") if isinstance(posting.get("baseSalary"), dict) else {}
+    value = salary.get("value") or {}
+    annual = isinstance(value, dict) and value.get("unitText") == "YEAR"
+    organization = posting.get("hiringOrganization") or {}
+    return FetchedJob(
+        external_id=external_id,
+        title=html_to_text(posting.get("title") or ""),
+        location=location,
+        is_remote=remote or mentions_remote(location),
+        url=url,
+        description=html_to_text(posting.get("description") or ""),
+        salary_min=int(float(value["minValue"])) if annual and value.get("minValue") else None,
+        salary_max=int(float(value["maxValue"])) if annual and value.get("maxValue") else None,
+        salary_currency=salary.get("currency") if annual else None,
+        posted_at=parse_iso(posting.get("datePosted")),
+        company=(organization.get("name") if isinstance(organization, dict) else organization) or "Unknown",
+    )
 
 
 async def fetch_greenhouse(client: httpx.AsyncClient, slug: str) -> list[FetchedJob]:
@@ -391,6 +446,133 @@ async def fetch_rippling(client: httpx.AsyncClient, slug: str) -> list[FetchedJo
     return await gather_limited(detail(entry) for entry in by_id.values())
 
 
+async def fetch_breezy(client: httpx.AsyncClient, slug: str) -> list[FetchedJob]:
+    response = await client.get(f"https://{slug}.breezy.hr/json")
+    response.raise_for_status()
+
+    async def detail(job: dict) -> FetchedJob:
+        # The JSON listing has no description; the posting page carries it in a plain div.
+        page = (await request(client, "GET", job["url"])).text
+        match = re.search(r'<div class="description">(.*?)<div class="apply-container">', page, re.S)
+        places = job.get("locations") or [job.get("location") or {}]
+        location = "; ".join(p["name"] for p in places if p.get("name"))
+        remote = any(p.get("is_remote") for p in places)
+        return FetchedJob(
+            external_id=job["id"],
+            title=job["name"],
+            location=location or ("Remote" if remote else ""),
+            is_remote=remote or mentions_remote(location),
+            url=job["url"],
+            description=html_to_text(match.group(1)) if match else "",
+            posted_at=parse_iso(job.get("published_date")),
+        )
+
+    return await gather_limited(detail(job) for job in response.json())
+
+
+async def jsonld_details(client: httpx.AsyncClient, urls: dict[str, str]) -> list[FetchedJob]:
+    """Fetch each posting page ({external_id: url}) and read its schema.org JobPosting."""
+
+    async def detail(external_id: str, url: str) -> FetchedJob | None:
+        response = await request(client, "GET", url, headers=BROWSER_HEADERS)
+        posting = jsonld_posting(response.text)
+        return jsonld_job(posting, url, external_id) if posting else None
+
+    return [job for job in await gather_limited(detail(i, u) for i, u in urls.items()) if job]
+
+
+async def fetch_jazzhr(client: httpx.AsyncClient, slug: str) -> list[FetchedJob]:
+    response = await client.get(f"https://{slug}.applytojob.com/apply", headers=BROWSER_HEADERS)
+    response.raise_for_status()
+    # A missing or closed board redirects to jazzhr.com or shows an "Inactive Career Page".
+    if response.url.host != f"{slug}.applytojob.com" or "Inactive Career Page" in response.text:
+        raise ValueError(f"no active JazzHR board at {slug}.applytojob.com")
+    links = dict(
+        (job_id, url)
+        for url, job_id in re.findall(rf'href="(https://{re.escape(slug)}\.applytojob\.com/apply/(\w+)/[^"]*)"', response.text)
+    )
+
+    # Posting pages have no JobPosting JSON-LD and no posted date, only plain markup.
+    async def detail(job_id: str, url: str) -> FetchedJob:
+        page = (await request(client, "GET", url, headers=BROWSER_HEADERS)).text
+        title = re.search(r"<div class='job-header'>.*?<h2>(.*?)</h2>", page, re.S)
+        place = re.search(r'<div title="Location">(.*?)</div>', page, re.S)
+        body = re.search(r'id="job-description">(.*?)<div class="resumator-mobile-apply-wrapper', page, re.S)
+        location = html_to_text(place.group(1)) if place else ""
+        return FetchedJob(
+            external_id=job_id,
+            title=html_to_text(title.group(1)) if title else "",
+            location=location,
+            is_remote=mentions_remote(location),
+            url=url,
+            description=html_to_text(body.group(1)) if body else "",
+        )
+
+    return await gather_limited(detail(job_id, url) for job_id, url in links.items())
+
+
+async def fetch_jobvite(client: httpx.AsyncClient, slug: str) -> list[FetchedJob]:
+    response = await client.get(f"https://jobs.jobvite.com/{slug}/jobs", headers=BROWSER_HEADERS)
+    response.raise_for_status()
+    if response.url.host != "jobs.jobvite.com":
+        raise ValueError(f"no Jobvite board at jobs.jobvite.com/{slug}")
+    links = re.findall(rf'href="(/{re.escape(slug)}/job/(\w+))"', response.text)
+    return await jsonld_details(client, {job_id: f"https://jobs.jobvite.com{path}" for path, job_id in links})
+
+
+ICIMS_MAX_PAGES = 10
+
+
+async def fetch_icims(client: httpx.AsyncClient, slug: str) -> list[FetchedJob]:
+    """slug: the careers subdomain, e.g. "careers-acme" for careers-acme.icims.com."""
+    host = f"https://{slug}.icims.com"
+    links: dict[str, str] = {}
+    for page in range(ICIMS_MAX_PAGES):
+        response = await request(
+            client, "GET", f"{host}/jobs/search", params={"ss": 1, "in_iframe": 1, "pr": page}, headers=BROWSER_HEADERS
+        )
+        found = re.findall(rf'href="({re.escape(host)}/jobs/(\d+)/[^"?]*/job)', response.text)
+        new = {job_id: f"{url}?in_iframe=1" for url, job_id in found if job_id not in links}
+        if not new:
+            break
+        links.update(new)
+    return await jsonld_details(client, links)
+
+
+TEAMTAILOR_NS = {"tt": "https://teamtailor.com/locations"}
+
+
+async def fetch_teamtailor(client: httpx.AsyncClient, slug: str) -> list[FetchedJob]:
+    """slug: the careers site host, e.g. "acme.teamtailor.com" or a custom domain like "careers.acme.com"."""
+    host = re.sub(r"^https?://", "", slug).split("/")[0]
+    response = await client.get(f"https://{host}/jobs.rss")
+    response.raise_for_status()
+    jobs = []
+    for item in ET.fromstring(response.content).iter("item"):
+        places = [
+            ", ".join(p for p in (loc.findtext("tt:city", "", TEAMTAILOR_NS), loc.findtext("tt:country", "", TEAMTAILOR_NS)) if p)
+            for loc in item.findall("tt:locations/tt:location", TEAMTAILOR_NS)
+        ]
+        location = "; ".join(p for p in places if p)
+        # remoteStatus: none, hybrid or fully.
+        remote = item.findtext("remoteStatus") == "fully"
+        if remote:
+            location = f"Remote ({location})" if location else "Remote"
+        pub = item.findtext("pubDate")
+        jobs.append(
+            FetchedJob(
+                external_id=item.findtext("guid") or item.findtext("link") or "",
+                title=item.findtext("title") or "",
+                location=location,
+                is_remote=remote or mentions_remote(location),
+                url=item.findtext("link") or "",
+                description=html_to_text(item.findtext("description") or ""),
+                posted_at=parsedate_to_datetime(pub) if pub else None,
+            )
+        )
+    return jobs
+
+
 ATS_FETCHERS: dict[str, Callable[[httpx.AsyncClient, str], Awaitable[list[FetchedJob]]]] = {
     "greenhouse": fetch_greenhouse,
     "lever": fetch_lever,
@@ -402,6 +584,11 @@ ATS_FETCHERS: dict[str, Callable[[httpx.AsyncClient, str], Awaitable[list[Fetche
     "bamboohr": fetch_bamboohr,
     "workday": fetch_workday,
     "rippling": fetch_rippling,
+    "breezy": fetch_breezy,
+    "jazzhr": fetch_jazzhr,
+    "teamtailor": fetch_teamtailor,
+    "jobvite": fetch_jobvite,
+    "icims": fetch_icims,
 }
 
 ATS_NAMES = {
@@ -415,4 +602,9 @@ ATS_NAMES = {
     "bamboohr": "BambooHR",
     "workday": "Workday",
     "rippling": "Rippling",
+    "breezy": "Breezy HR",
+    "jazzhr": "JazzHR",
+    "teamtailor": "Teamtailor",
+    "jobvite": "Jobvite",
+    "icims": "iCIMS",
 }
