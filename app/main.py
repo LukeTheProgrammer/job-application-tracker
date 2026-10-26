@@ -15,7 +15,7 @@ from app.external import link_job
 from app.fetch import run_fetch
 from app.filters import apply_filters
 from app.stack import find_stack
-from app.models import APPLICATION_STATUSES, Application, Company, Job, Source
+from app.models import APPLICATION_STATUSES, QUESTION_KINDS, Application, Company, Job, Question, Source
 from app.profile import extract_resume_text, get_profile, parse_list
 from app.seed import seed
 from app.sources import ATS_NAMES
@@ -362,7 +362,7 @@ def show_application(
     return templates.TemplateResponse(
         request,
         "_application_form.html" if partial else "application.html",
-        {"page": "applications", "a": application, "statuses": APPLICATION_STATUSES, "saved": saved, "next": next},
+        {"page": "applications", "a": application, "statuses": APPLICATION_STATUSES, "kinds": QUESTION_KINDS, "saved": saved, "next": next},
     )
 
 
@@ -397,3 +397,80 @@ def delete_application(application_id: int, session: Session = Depends(get_sessi
         session.delete(application)
         session.commit()
     return RedirectResponse("/applications", status_code=303)
+
+
+@app.get("/questions")
+def list_questions(request: Request, kind: str = "", saved: bool = False, session: Session = Depends(get_session)):
+    query = select(Question).order_by(Question.updated_at.desc())
+    if kind:
+        query = query.where(Question.kind == kind)
+    counts = dict(session.execute(select(Question.kind, func.count()).group_by(Question.kind)).all())
+    applications = session.scalars(select(Application).order_by(Application.updated_at.desc())).all()
+    return templates.TemplateResponse(
+        request,
+        "questions.html",
+        {
+            "page": "questions",
+            "questions": session.scalars(query).all(),
+            "kinds": QUESTION_KINDS,
+            "current": kind,
+            "counts": counts,
+            "total": sum(counts.values()),
+            "applications": applications,
+            "saved": saved,
+        },
+    )
+
+
+def fill_question(q: Question, kind: str, question: str, answer: str, application_id: str) -> None:
+    q.kind = kind if kind in QUESTION_KINDS else QUESTION_KINDS[0]
+    q.question = question.strip()
+    q.answer = answer.strip()
+    q.application_id = int(application_id) if application_id else None
+
+
+def question_redirect(next: str) -> RedirectResponse:
+    return RedirectResponse(next if next.startswith(("/questions", "/applications")) else "/questions?saved=1", status_code=303)
+
+
+@app.post("/questions")
+def add_question(
+    question: Annotated[str, Form()],
+    kind: Annotated[str, Form()] = "Application",
+    answer: Annotated[str, Form()] = "",
+    application_id: Annotated[str, Form()] = "",
+    next: Annotated[str, Form()] = "",
+    session: Session = Depends(get_session),
+) -> RedirectResponse:
+    q = Question()
+    fill_question(q, kind, question, answer, application_id)
+    session.add(q)
+    session.commit()
+    return question_redirect(next)
+
+
+@app.post("/questions/{question_id}")
+def save_question(
+    question_id: int,
+    question: Annotated[str, Form()],
+    kind: Annotated[str, Form()] = "Application",
+    answer: Annotated[str, Form()] = "",
+    application_id: Annotated[str, Form()] = "",
+    next: Annotated[str, Form()] = "",
+    session: Session = Depends(get_session),
+) -> RedirectResponse:
+    q = session.get(Question, question_id)
+    if q is None:
+        raise HTTPException(404)
+    fill_question(q, kind, question, answer, application_id)
+    session.commit()
+    return question_redirect(next)
+
+
+@app.post("/questions/{question_id}/delete")
+def delete_question(question_id: int, next: Annotated[str, Form()] = "", session: Session = Depends(get_session)) -> RedirectResponse:
+    q = session.get(Question, question_id)
+    if q is not None:
+        session.delete(q)
+        session.commit()
+    return question_redirect(next)

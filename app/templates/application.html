@@ -10,6 +10,18 @@
   {% if a.job and a.job.description %}
   <details><summary class="muted">Job description</summary><div style="white-space:pre-wrap">{{ a.job.description }}</div></details>
   {% endif %}
+  <h2>Questions <span class="muted">· from the application or interviews</span></h2>
+  {% for q in a.questions %}
+  <details>
+    <summary><span class="status">{{ q.kind }}</span> {{ q.question }}</summary>
+    {% with fixed_application=a, next="/applications/%d" % a.id %}{% include "_question_form.html" %}{% endwith %}
+  </details>
+  {% endfor %}
+  <details {% if not a.questions %}open{% endif %}>
+    <summary class="muted">Add a question</summary>
+    {% with q=none, fixed_application=a, next="/applications/%d" % a.id %}{% include "_question_form.html" %}{% endwith %}
+  </details>
+  <p class="muted"><a href="/questions">All questions →</a></p>
   <form method="post" action="/applications/{{ a.id }}/delete" style="margin-top:2rem">
     <button class="ghost" name="confirm" value="1" onclick="return this.dataset.armed ? true : (this.dataset.armed = 1, this.textContent = 'Click again to delete', false)">Delete this application</button>
   </form>

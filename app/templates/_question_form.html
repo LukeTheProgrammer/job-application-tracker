@@ -1,0 +1,22 @@
+{# Add/edit form for a Question. Needs q (or none for a new one), kinds, next; applications for the picker, or fixed_application to pin it. #}
+<form method="post" action="{{ '/questions/%d' % q.id if q else '/questions' }}">
+  <input type="hidden" name="next" value="{{ next }}">
+  <div class="row">
+    <label>Type
+      <select name="kind">{% for k in kinds %}<option {% if (q.kind if q else 'Application') == k %}selected{% endif %}>{{ k }}</option>{% endfor %}</select>
+    </label>
+    {% if fixed_application %}
+    <input type="hidden" name="application_id" value="{{ fixed_application.id }}">
+    {% else %}
+    <label>Application <span class="hint">(optional)</span>
+      <select name="application_id">
+        <option value="">— None —</option>
+        {% for a in applications %}<option value="{{ a.id }}" {% if q and q.application_id == a.id %}selected{% endif %}>{{ a.title }} at {{ a.company_name }}</option>{% endfor %}
+      </select>
+    </label>
+    {% endif %}
+  </div>
+  <label>Question <textarea name="question" required rows="2">{{ q.question if q else '' }}</textarea></label>
+  <label>My answer <textarea name="answer" rows="6">{{ q.answer if q else '' }}</textarea></label>
+  <button type="submit">{{ 'Save' if q else 'Add question' }}</button>
+</form>

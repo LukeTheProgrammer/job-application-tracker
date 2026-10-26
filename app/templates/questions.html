@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Questions{% endblock %}
+{% block body %}
+<main class="container narrow">
+  <h1>Questions</h1>
+  <p class="muted">Questions from application forms and interviews, with how you answered. They give a picture of your history, personality and soft skills to draw on in future applications.</p>
+  {% if saved %}<div class="flash">Saved.</div>{% endif %}
+  <details {% if not questions and not current %}open{% endif %}>
+    <summary>Add a question</summary>
+    {% with q=none, next="/questions?saved=1" %}{% include "_question_form.html" %}{% endwith %}
+  </details>
+  <div class="chips">
+    <a href="/questions" {% if not current %}class="on"{% endif %}>All ({{ total }})</a>
+    {% for k in kinds %}{% if counts.get(k) %}
+    <a href="/questions?kind={{ k | urlencode }}" {% if current == k %}class="on"{% endif %}>{{ k }} ({{ counts[k] }})</a>
+    {% endif %}{% endfor %}
+  </div>
+  {% for q in questions %}
+  <article>
+    <header>
+      <span class="status">{{ q.kind }}</span>
+      {% if q.application %}<a class="muted" href="/applications/{{ q.application.id }}">{{ q.application.title }} at {{ q.application.company_name }}</a>{% endif %}
+      <span class="muted">· {{ q.updated_at | age }} ago</span>
+      <p style="margin:.5rem 0 0"><b>{{ q.question }}</b></p>
+    </header>
+    <div style="white-space:pre-wrap">{{ q.answer or '—' }}</div>
+    <details style="margin-top:1rem">
+      <summary class="muted">Edit</summary>
+      {% with next=request.url.path ~ ('?' ~ request.url.query if request.url.query else '') %}{% include "_question_form.html" %}{% endwith %}
+      <form method="post" action="/questions/{{ q.id }}/delete">
+        <input type="hidden" name="next" value="/questions">
+        <button class="ghost" onclick="return this.dataset.armed ? true : (this.dataset.armed = 1, this.textContent = 'Click again to delete', false)">Delete</button>
+      </form>
+    </details>
+  </article>
+  {% endfor %}
+</main>
+{% endblock %}

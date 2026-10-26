@@ -120,3 +120,27 @@ class Application(Base):
     )
 
     job: Mapped[Job | None] = relationship()
+    questions: Mapped[list["Question"]] = relationship(back_populates="application", order_by="Question.created_at", passive_deletes=True)
+
+
+QUESTION_KINDS = ["Application", "Interview"]
+
+
+class Question(Base):
+    """A question from an application form or interview and the user's answer, kept to inform future applications."""
+
+    __tablename__ = "questions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[int | None] = mapped_column(
+        ForeignKey("applications.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(40), default="Application")
+    question: Mapped[str] = mapped_column(Text)
+    answer: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    application: Mapped[Application | None] = relationship(back_populates="questions")
