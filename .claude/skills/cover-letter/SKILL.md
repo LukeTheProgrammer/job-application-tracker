@@ -13,10 +13,11 @@ Write a short cover letter for one job, grounded in the user's resume. Never sen
    ```bash
    .venv/bin/python -m app.cover_letter show JOB_ID
    ```
-   This prints the resume, the posting and the job's application, if one exists. For an application ID, use its `job_id`. If the user pasted a description for a job that isn't in the database, use that, and get the resume with `.venv/bin/python -c "from app.db import SessionLocal; from app.profile import get_profile; print(get_profile(SessionLocal()).resume_text)"`. If the stored description is empty or a stub (SmartRecruiters jobs never have one), fetch the job's URL with WebFetch and say the description came from the live page. If that also returns no real description (pages built with JavaScript, such as Workday or Ashby, often don't), ask the user to paste it.
+   This prints the resume, the user's saved answers to past application and interview questions, the posting and the job's application, if one exists. For an application ID, use its `job_id`. If the user pasted a description for a job that isn't in the database, use that, and get the resume and past answers with `.venv/bin/python -m app.cover_letter background`. If the stored description is empty or a stub (SmartRecruiters jobs never have one), fetch the job's URL with WebFetch and say the description came from the live page. If that also returns no real description (pages built with JavaScript, such as Workday or Ashby, often don't), ask the user to paste it.
 2. Pick the 2-3 requirements in the posting that the resume matches best, with a concrete achievement for each: a named employer, product or result. Don't claim skills the resume doesn't show. If the posting needs one the user lacks, leave it out rather than inventing experience.
-3. Write the letter to `$SCRATCH/letter-JOB_ID.txt` (the session scratchpad) and show it to the user in full.
-4. Always save it to the application, without asking:
+3. Read the past answers for the user's history, motivations, working style and soft skills, which the resume doesn't show. Where one fits this posting (for example, a story about mentoring for a role that mentions mentorship, or why they like small teams for a startup), work it into the opening or close in a sentence. Use the user's own facts, not their wording, and don't force one in if nothing fits. Answers can disagree or go out of date; prefer the most recent (they're printed newest first).
+4. Write the letter to `$SCRATCH/letter-JOB_ID.txt` (the session scratchpad) and show it to the user in full.
+5. Always save it to the application, without asking:
    ```bash
    .venv/bin/python -m app.cover_letter save JOB_ID "$SCRATCH/letter-JOB_ID.txt"
    ```
