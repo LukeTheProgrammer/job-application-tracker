@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_session
+from app import letter_runner
 from app.external import link_job
 from app.fetch import run_fetch
 from app.filters import apply_filters
@@ -388,6 +389,27 @@ def save_application(
     if next.startswith("/applications"):
         return RedirectResponse(next, status_code=303)
     return RedirectResponse(f"/applications/{application_id}?saved=1", status_code=303)
+
+
+@app.post("/applications/{application_id}/cover-letter")
+def write_cover_letter(
+    application_id: int,
+    instructions: Annotated[str, Form()] = "",
+    session: Session = Depends(get_session),
+) -> dict:
+    application = session.get(Application, application_id)
+    if application is None or application.job_id is None:
+        raise HTTPException(404)
+    letter_runner.start(application.id, application.job_id, instructions, application.cover_letter)
+    return letter_runner.status(application.id, application.cover_letter)
+
+
+@app.get("/applications/{application_id}/cover-letter")
+def cover_letter_status(application_id: int, session: Session = Depends(get_session)) -> dict:
+    application = session.get(Application, application_id)
+    if application is None:
+        raise HTTPException(404)
+    return letter_runner.status(application.id, application.cover_letter)
 
 
 @app.post("/applications/{application_id}/delete")

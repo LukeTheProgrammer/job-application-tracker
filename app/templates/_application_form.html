@@ -28,6 +28,14 @@
     <fieldset>
       <legend>Cover letter</legend>
       <textarea class="letter" id="{{ p }}cover_letter" name="cover_letter">{{ a.cover_letter }}</textarea>
+      {% if a.id is not none and a.job_id %}
+      {# No name on the instructions box, so saving the form doesn't submit it. #}
+      <div class="letter-writer">
+        <input type="text" class="letter-instructions" placeholder="Instructions for Claude (optional), e.g. lean on the Shopify work" aria-label="Instructions for Claude">
+        <button type="button" class="ghost" onclick="writeLetter(this, {{ a.id }})">Write with Claude</button>
+      </div>
+      <p class="hint letter-status"></p>
+      {% endif %}
     </fieldset>
     <fieldset>
       <legend>Notes</legend>

@@ -63,6 +63,9 @@
   .row button { width:100%; }
   #theme-toggle { font-size:1rem; line-height:1; }
   .copy-id { cursor:pointer; text-decoration:underline dotted; }
+  .letter-writer { display:flex; gap:.5rem; align-items:center; }
+  .letter-writer input { margin:0; flex:1; }
+  .letter-status { white-space:pre-wrap; margin:.4rem 0 0; }
 </style>
 </head>
 <body>
@@ -103,6 +106,50 @@
     el.textContent = "Copied!";
     setTimeout(() => { el.textContent = label; }, 1200);
   });
+
+  // "Write with Claude" on an application runs the cover-letter skill on the server, then polls until it saves.
+  // It lives here because the edit dialog loads the form as HTML, where inline scripts don't run.
+  async function letterRequest(url, options) {
+    const res = await fetch(url, options);
+    if (!res.ok) throw new Error(`The server returned ${res.status}.`);
+    return res.json();
+  }
+  async function writeLetter(btn, id) {
+    const box = btn.closest("fieldset");
+    const instructions = box.querySelector(".letter-instructions").value;
+    btn.disabled = true;
+    box.querySelector(".letter-status").textContent = "Writing… this takes a minute or two.";
+    try {
+      showLetter(btn, id, await letterRequest(`/applications/${id}/cover-letter`, { method: "POST", body: new URLSearchParams({ instructions }) }));
+    } catch (err) {
+      letterFailed(btn, `Couldn't start: ${err.message}`);
+    }
+  }
+  function showLetter(btn, id, run) {
+    const box = btn.closest("fieldset");
+    if (run.state === "running") {
+      setTimeout(async () => {
+        try {
+          showLetter(btn, id, await letterRequest(`/applications/${id}/cover-letter`));
+        } catch (err) {
+          letterFailed(btn, `Lost track of the run: ${err.message} Reopen the application to check whether the letter saved.`);
+        }
+      }, 3000);
+    } else if (run.state === "done") {
+      btn.disabled = false;
+      box.querySelector("textarea").value = run.letter;
+      box.querySelector(".letter-status").textContent = "Written and saved to this application.";
+    } else if (run.state === "idle") {
+      // The server has no record of the run it just started, so the app restarted and killed it.
+      letterFailed(btn, "Interrupted: the app restarted during the run. Try again.");
+    } else {
+      letterFailed(btn, run.output || "Something went wrong.");
+    }
+  }
+  function letterFailed(btn, message) {
+    btn.disabled = false;
+    btn.closest("fieldset").querySelector(".letter-status").textContent = message;
+  }
 </script>
 </body>
 </html>
