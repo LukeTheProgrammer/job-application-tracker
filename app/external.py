@@ -49,7 +49,7 @@ def link_job(session: Session, application: Application) -> None:
     Blank company and title fields on the application are filled in from the posting.
     """
     url = application.url
-    if application.job_id is not None or not url.startswith(("http://", "https://")):
+    if application.job is not None or not url.startswith(("http://", "https://")):
         return
     taken = select(Application.job_id).where(Application.job_id.is_not(None))
     job = session.scalar(select(Job).where(Job.url == url, Job.id.not_in(taken)))
