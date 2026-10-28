@@ -32,3 +32,11 @@ Three paragraphs, 200-280 words in total. No address block, date or subject line
 3. **Close:** what the user would take on for this team, tied to the posting's hardest problems, and a brief line inviting a conversation.
 
 Plain, confident and specific, and informal enough to sound like a person talking: half the words, twice the examples. Avoid filler like "I am writing to express my interest", "passionate", "synergy", "fast-paced environment" and "I believe I would be a great fit", "perfect fit", "continue my journey" and "take my skills to the next level". Don't repeat the resume line by line. Don't use em dashes.
+
+## Informal short answers
+
+When the form field is something like "Additional Information" or the user asks for something informal, skip the letter format. Write one paragraph of 60-100 words, no greeting or sign-off, in the user's own voice. Their version for Velvetech (application 56) is the reference:
+
+> I am a Full Stack engineer with 12 years of experience building and maintaining web software. I've specialized in PHP and have a strong preference for Laravel on the back-end. I have worked with several front-end frameworks and my current favorite is React with TypeScript. Above all, I love solving puzzles, learning new things, and making things that improve other people's lives. I would love to chat about how I could continue that work at Velvetech.
+
+What makes it sound like them: plain declarative sentences that start with "I"; stated preferences and favorites ("strong preference for Laravel", "my current favorite is React with TypeScript") instead of selling; no achievements, numbers or stories; one sentence of what they enjoy ("solving puzzles, learning new things, and making things that improve other people's lives"); a one-line close ("I would love to chat about..."). No pitch about the company, no clever phrasing.
