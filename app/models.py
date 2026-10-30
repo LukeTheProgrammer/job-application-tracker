@@ -1,7 +1,7 @@
 from datetime import date, datetime
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint, func
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from app.db import Base
 
@@ -16,6 +16,8 @@ class Profile(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     resume_text: Mapped[str] = mapped_column(Text, default="")
+    # The last uploaded PDF, shown on the Profile page. Deferred so loading the profile doesn't pull it in.
+    resume_pdf: Mapped[bytes | None] = deferred(mapped_column(LargeBinary, nullable=True))
     target_roles: Mapped[list[str]] = mapped_column(JSON, default=list)
     title_keywords: Mapped[list[str]] = mapped_column(JSON, default=list)
     title_terms: Mapped[list[str]] = mapped_column(JSON, default=lambda: list(DEFAULT_TITLE_TERMS))

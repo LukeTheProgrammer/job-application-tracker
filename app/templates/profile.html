@@ -9,6 +9,9 @@
       <legend>Resume</legend>
       <label for="resume_file">Upload <span class="hint">PDF, .txt or .md. Replaces the text below.</span></label>
       <input type="file" id="resume_file" name="resume_file" accept=".pdf,.txt,.md">
+      {% if has_pdf %}
+      <iframe class="resume-pdf" src="/profile/resume.pdf" title="Uploaded resume"></iframe>
+      {% endif %}
       <label for="resume_text">Resume text <span class="hint">Sent to Claude for scoring.</span></label>
       <textarea class="resume" id="resume_text" name="resume_text">{{ profile.resume_text }}</textarea>
     </fieldset>

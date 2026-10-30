@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -16,7 +16,7 @@ from app.external import link_job
 from app.fetch import run_fetch
 from app.filters import apply_filters
 from app.stack import find_stack
-from app.models import APPLICATION_STATUSES, QUESTION_KINDS, Application, Company, Job, Question, Source
+from app.models import APPLICATION_STATUSES, QUESTION_KINDS, Application, Company, Job, Profile, Question, Source
 from app.profile import extract_resume_text, get_profile, parse_list
 from app.seed import seed
 from app.sources import ATS_NAMES
@@ -210,9 +210,19 @@ def delete_company(company_id: int, session: Session = Depends(get_session)) -> 
 
 @app.get("/profile")
 def show_profile(request: Request, session: Session = Depends(get_session), saved: bool = False):
+    profile = get_profile(session)
+    has_pdf = session.scalar(select(Profile.resume_pdf.is_not(None)).where(Profile.id == profile.id))
     return templates.TemplateResponse(
-        request, "profile.html", {"page": "profile", "profile": get_profile(session), "saved": saved}
+        request, "profile.html", {"page": "profile", "profile": profile, "saved": saved, "has_pdf": has_pdf}
     )
+
+
+@app.get("/profile/resume.pdf")
+def resume_pdf(session: Session = Depends(get_session)):
+    pdf = get_profile(session).resume_pdf
+    if pdf is None:
+        raise HTTPException(404)
+    return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": 'inline; filename="resume.pdf"'})
 
 
 @app.post("/profile")
@@ -233,9 +243,11 @@ async def save_profile(
 ):
     profile = get_profile(session)
 
-    # An uploaded file replaces the pasted text.
+    # An uploaded file replaces the pasted text. A non-PDF upload drops the stored PDF, since it no longer matches.
     if resume_file is not None and resume_file.filename:
-        resume_text = extract_resume_text(resume_file.filename, await resume_file.read())
+        data = await resume_file.read()
+        resume_text = extract_resume_text(resume_file.filename, data)
+        profile.resume_pdf = data if resume_file.filename.lower().endswith(".pdf") else None
 
     profile.resume_text = resume_text.strip()
     profile.target_roles = parse_list(target_roles)
